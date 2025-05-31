@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Customer Support</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(to right, #282828, #000000);
+      margin: 0;
+      padding: 0;
+    }
+
+    .floating-header {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      background: #737373;
+      z-index: 999;
+      padding: 10px 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .floating-header img {
+      height: 30px;
+    }
+
+    .floating-header h1 {
+      color: #fff;
+      margin: 0;
+    }
+
+    #fieldInputsContainer {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    #fieldInputsContainer.controls.column {
+      flex-direction: row;
+      align-items: flex-start;
+    }
+
+    input[type="text"] {
+      padding: 8px;
+      font-size: 14px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+
+    #noteArea {
+      width: 80%;
+      margin-top: 10px;
+      display: none;
+    }
+
+    #noteInput {
+      width: 100%;
+      padding: 6px;
+      margin-top: 5px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+
+    #dropzone {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 42px;
+      height: 40px;
+      border: 2px dashed #aaa;
+      border-radius: 6px;
+      text-align: center;
+      line-height: 36px;
+      font-size: 10px;
+      color: #aaa;
+      cursor: pointer;
+      z-index: 1000;
+    }
+
+    #downloadBtn {
+      position: fixed;
+      top: 10px;
+      right: 60px;
+      padding: 6px 10px;
+      height: 45px;
+      width: 45px;
+      font-size: 12px;
+      background: #222;
+      color: white;
+      border: 1px solid #444;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 1000;
+    }
+
+    #jsonUpload {
+      display: none;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 120px 20px 40px 20px;
+    }
+
+    .category {
+      margin-bottom: 30px;
+    }
+
+    .category h2 {
+      margin-bottom: 12px;
+      color: #ffffff;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 5px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 15px;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+
+    .card {
+      background: #000;
+      border-left: 6px solid #3498db;
+      border-radius: 8px;
+      padding: 14px 18px;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .card:hover,
+    .tags button:hover,
+    .shortcuts a:hover {
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      transform: translateY(-2px);
+    }
+
+    .card-label {
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #7fb4e9;
+    }
+
+    .card-text {
+      white-space: pre-wrap;
+      font-size: 14px;
+      color: #e4e4e4;
+    }
+
+    .tags, .shortcuts {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .shortcuts a {
+      background: #000;
+      border-left: 6px solid #ffffff;
+      border-radius: 8px;
+      padding: 14px 18px;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      margin-bottom: 10px;
+      color: #7fb4e9;
+      text-decoration: none;
+    }
+    .tags button {
+      background: #1c1c1c;
+      color: #fff;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-size: 12px;
+      transition: background 0.2s;
+    }
+  </style>
+</head>
+<body>
+  <div class="floating-header">
+    <img id="logo" src="" alt="Logo" style="display:none;" />
+    <h1>Customer Support</h1>
+    <div id="fieldInputsContainer" class="controls"></div>
+    <button id="toggleNoteBtn" onclick="toggleNote()">📝 Note</button>
+    <div id="noteArea">
+      <textarea id="noteInput" placeholder="Add a note..." style="width:100%; height:60px; resize:vertical;"></textarea>
+    </div>
+  </div>
+
+  <div id="dropzone" title="Click or drop JSON">JSON</div>
+  <button id="downloadBtn" title="Download current JSON">⬇</button>
+  <input type="file" id="jsonUpload" accept=".json" />
+
+  <div class="container" id="snippetsContainer"></div>
+
+  <script>
+    let fieldValues = {};
+    let lastSnippets = {};
+    let hiddenFields = {};
+    let filters = {};
+    let noteValue = "";
+
+    function adjustContainerOffset() {
+      const header = document.querySelector(".floating-header");
+      const container = document.querySelector(".container");
+      const height = header.offsetHeight;
+      container.style.paddingTop = (height + 20) + "px";
+    }
+
+    window.addEventListener("load", adjustContainerOffset);
+    window.addEventListener("resize", adjustContainerOffset);
+
+    document.getElementById("dropzone").addEventListener("click", () => document.getElementById("jsonUpload").click());
+    document.getElementById("dropzone").addEventListener("dragover", (e) => e.preventDefault());
+    document.getElementById("dropzone").addEventListener("drop", (e) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (file) readJsonFile(file);
+    });
+
+    document.getElementById("jsonUpload").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file) readJsonFile(file);
+    });
+
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      const output = structuredClone(lastSnippets);
+      output.fields = { ...fieldValues };
+      output.hidden = { ...hiddenFields };
+      output.filters = { ...filters };
+      output.note = document.getElementById("noteInput").value || "";
+
+      const json = JSON.stringify(output, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "snippets.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+    function toggleNote() {
+      const noteDiv = document.getElementById("noteArea");
+      const isHidden = getComputedStyle(noteDiv).display === "none";
+      noteDiv.style.display = isHidden ? "block" : "none";
+      adjustContainerOffset();
+    }
+
+    function readJsonFile(file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const parsed = JSON.parse(event.target.result);
+          if (parsed.logo) {
+            const logo = document.getElementById("logo");
+            logo.src = parsed.logo;
+            logo.style.display = "block";
+          }
+          if (parsed.hidden) hiddenFields = parsed.hidden;
+          if (parsed.filters) filters = parsed.filters;
+          if (parsed.note) {
+            noteValue = parsed.note;
+            document.getElementById("noteInput").value = noteValue;
+          }
+          document.getElementById("noteArea").style.display = noteValue ? "block" : "none";
+          if (parsed.fields) renderFields(parsed.fields);
+          lastSnippets = parsed;
+          renderSnippets(parsed);
+          adjustContainerOffset();
+        } catch (err) {
+          alert("Invalid JSON format.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function renderFields(fields) {
+      const container = document.getElementById("fieldInputsContainer");
+      container.innerHTML = "";
+      container.classList.toggle("column", Object.keys(fields).length > 4);
+
+      Object.entries(fields).forEach(([key, value]) => {
+        fieldValues[key] = value;
+        const input = document.createElement("input");
+        input.type = "text";
+        input.placeholder = key;
+        input.value = value;
+        input.addEventListener("input", (e) => {
+          let rawValue = e.target.value;
+          if (filters[key] && filters[key].regex) {
+            try {
+              const match = rawValue.match(new RegExp(filters[key].regex));
+              fieldValues[key] = match ? match[0] : rawValue;
+            } catch (err) {
+              fieldValues[key] = rawValue;
+            }
+          } else {
+            fieldValues[key] = rawValue;
+          }
+          renderSnippets(lastSnippets);
+        });
+        container.appendChild(input);
+      });
+
+      adjustContainerOffset();
+    }
+
+    function renderSnippets(snippets) {
+      const container = document.getElementById("snippetsContainer");
+      container.innerHTML = "";
+
+      Object.entries(snippets).forEach(([category, content]) => {
+        if (["fields", "logo", "note", "hidden", "filters"].includes(category)) return;
+
+        const section = document.createElement("div");
+        section.className = "category";
+
+        const title = document.createElement("h2");
+        title.textContent = category;
+        section.appendChild(title);
+
+        if (content.tags && Array.isArray(content.tags)) {
+          const tagWrap = document.createElement("div");
+          tagWrap.className = "tags";
+          content.tags.forEach(tag => {
+            const tagBtn = document.createElement("button");
+            tagBtn.textContent = tag;
+            tagWrap.appendChild(tagBtn);
+          });
+          section.appendChild(tagWrap);
+        }
+
+        if (content.shortcuts && Array.isArray(content.shortcuts)) {
+          const shortcutWrap = document.createElement("div");
+          shortcutWrap.className = "shortcuts";
+          content.shortcuts.forEach(shortcut => {
+            const a = document.createElement("a");
+            a.href = shortcut.url;
+            a.target = "_blank";
+            a.textContent = shortcut.label;
+            shortcutWrap.appendChild(a);
+          });
+          section.appendChild(shortcutWrap);
+        }
+
+        const grid = document.createElement("div");
+        grid.className = "grid";
+
+        Object.entries(content).forEach(([label, text]) => {
+          if (["tags", "shortcuts"].includes(label)) return;
+
+          const card = document.createElement("div");
+          card.className = "card";
+
+          const rendered = text.replace(/\[([^\]]+)\]/g, (_, key) => {
+            if (fieldValues[key] !== undefined) return fieldValues[key];
+            if (hiddenFields[key] !== undefined) return hiddenFields[key];
+            return `[${key}]`;
+          });
+
+          card.addEventListener("click", () => {
+            navigator.clipboard.writeText(rendered).then(() => {
+              alert(`Copied: "${rendered}"`);
+            });
+          });
+
+          const cardLabel = document.createElement("div");
+          cardLabel.className = "card-label";
+          cardLabel.textContent = label;
+
+          const cardText = document.createElement("div");
+          cardText.className = "card-text";
+          cardText.textContent = rendered;
+
+          card.appendChild(cardLabel);
+          card.appendChild(cardText);
+          grid.appendChild(card);
+        });
+
+        section.appendChild(grid);
+        container.appendChild(section);
+      });
+    }
+
+    fetch("snippets.json")
+      .then(res => res.json())
+      .then(json => {
+        if (json.logo) {
+          const logo = document.getElementById("logo");
+          logo.src = json.logo;
+          logo.style.display = "block";
+        }
+        if (json.hidden) hiddenFields = json.hidden;
+        if (json.filters) filters = json.filters;
+        if (json.note) {
+          noteValue = json.note;
+          document.getElementById("noteInput").value = noteValue;
+        }
+        if (json.fields) renderFields(json.fields);
+        lastSnippets = json;
+        renderSnippets(json);
+        adjustContainerOffset();
+      })
+      .catch(() => console.warn("snippets.json not found."));
+  </script>
+</body>
+</html>
