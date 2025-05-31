@@ -1,0 +1,40 @@
+{
+  "logo": "https://carino.systems/assets/images/logo.webp",
+  "note": "This is a shared note across the session.\nFeel free to include multiline content.",
+  "fields": {
+    "client": "Carino Systems",
+    "order": "https://example.com/orders/1234567890",
+    "agent": "Maria"
+  },
+  "hidden": {
+    "name": "SupportBot3000",
+    "internal_id": "ID-8291"
+  },
+  "filters": {
+    "order": {
+      "regex": "[^/]+$"
+    }
+  },
+  "Support Cases": {
+    "tags": ["urgent", "login issue", "escalation"],
+    "shortcuts": [
+      {
+        "label": "Internal Wiki",
+        "url": "https://intranet.example.com/wiki"
+      },
+      {
+        "label": "Client Dashboard",
+        "url": "https://example.com/dashboard"
+      }
+    ],
+    "Welcome Message": "Hello [client],\n\nMy name is [agent]. I'm here to help you today.",
+    "Order Reference": "For your reference, your order ID is: [order]",
+    "Internal Note": "Handled by: [name] ([internal_id])"
+  },
+
+  "Follow Ups": {
+    "tags": ["reminder", "next step"],
+    "Short Summary": "Hi [client], just a quick follow-up regarding your case.",
+    "Reminder": "Please let us know if your issue with order [order] has been resolved."
+  }
+}
