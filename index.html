@@ -181,6 +181,29 @@
       font-size: 12px;
       transition: background 0.2s;
     }
+    /* Notification */
+    .notification {
+      background-color: #28a745;
+      color: white;
+      text-align: center;
+      padding: 10px 20px;
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 2000;
+      border-radius: 6px;
+      font-size: 14px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      display: none;
+      animation: fadeInOut 3s ease;
+    }
+
+    @keyframes fadeInOut {
+      0%   { opacity: 0; transform: translateY(-10px); }
+      10%  { opacity: 1; transform: translateY(0); }
+      90%  { opacity: 1; }
+      100% { opacity: 0; transform: translateY(-10px); }
+    }
   </style>
 </head>
 <body>
@@ -206,17 +229,17 @@
     let hiddenFields = {};
     let filters = {};
     let noteValue = "";
-
+      
     function adjustContainerOffset() {
       const header = document.querySelector(".floating-header");
       const container = document.querySelector(".container");
       const height = header.offsetHeight;
       container.style.paddingTop = (height + 20) + "px";
     }
-
+    
     window.addEventListener("load", adjustContainerOffset);
     window.addEventListener("resize", adjustContainerOffset);
-
+    
     document.getElementById("dropzone").addEventListener("click", () => document.getElementById("jsonUpload").click());
     document.getElementById("dropzone").addEventListener("dragover", (e) => e.preventDefault());
     document.getElementById("dropzone").addEventListener("drop", (e) => {
@@ -224,19 +247,19 @@
       const file = e.dataTransfer.files[0];
       if (file) readJsonFile(file);
     });
-
+    
     document.getElementById("jsonUpload").addEventListener("change", (e) => {
       const file = e.target.files[0];
       if (file) readJsonFile(file);
     });
-
+    
     document.getElementById("downloadBtn").addEventListener("click", () => {
       const output = structuredClone(lastSnippets);
       output.fields = { ...fieldValues };
       output.hidden = { ...hiddenFields };
       output.filters = { ...filters };
       output.note = document.getElementById("noteInput").value || "";
-
+    
       const json = JSON.stringify(output, null, 2);
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -248,13 +271,37 @@
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     });
+    
     function toggleNote() {
       const noteDiv = document.getElementById("noteArea");
       const isHidden = getComputedStyle(noteDiv).display === "none";
       noteDiv.style.display = isHidden ? "block" : "none";
       adjustContainerOffset();
     }
-
+    
+    // Function to show a notification
+    function showNotification(message) {
+      const notification = document.createElement('div');
+      notification.className = 'notification';
+      notification.innerText = message;
+      document.body.appendChild(notification);
+      notification.style.display = 'block';
+      setTimeout(() => {
+        notification.style.display = 'none';
+        document.body.removeChild(notification);
+      }, 3000);
+    }
+    
+    // Function to copy text to clipboard
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        showNotification("✅ Copied to clipboard!");
+      }).catch(err => {
+        console.error("Clipboard error:", err);
+        showNotification("❌ Failed to copy.");
+      });
+    }
+    
     function readJsonFile(file) {
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -282,12 +329,12 @@
       };
       reader.readAsText(file);
     }
-
+    
     function renderFields(fields) {
       const container = document.getElementById("fieldInputsContainer");
       container.innerHTML = "";
       container.classList.toggle("column", Object.keys(fields).length > 4);
-
+    
       Object.entries(fields).forEach(([key, value]) => {
         fieldValues[key] = value;
         const input = document.createElement("input");
@@ -310,24 +357,24 @@
         });
         container.appendChild(input);
       });
-
+    
       adjustContainerOffset();
     }
-
+    
     function renderSnippets(snippets) {
       const container = document.getElementById("snippetsContainer");
       container.innerHTML = "";
-
+    
       Object.entries(snippets).forEach(([category, content]) => {
         if (["fields", "logo", "note", "hidden", "filters"].includes(category)) return;
-
+      
         const section = document.createElement("div");
         section.className = "category";
-
+      
         const title = document.createElement("h2");
         title.textContent = category;
         section.appendChild(title);
-
+      
         if (content.tags && Array.isArray(content.tags)) {
           const tagWrap = document.createElement("div");
           tagWrap.className = "tags";
@@ -338,7 +385,7 @@
           });
           section.appendChild(tagWrap);
         }
-
+      
         if (content.shortcuts && Array.isArray(content.shortcuts)) {
           const shortcutWrap = document.createElement("div");
           shortcutWrap.className = "shortcuts";
@@ -351,47 +398,45 @@
           });
           section.appendChild(shortcutWrap);
         }
-
+      
         const grid = document.createElement("div");
         grid.className = "grid";
-
+      
         Object.entries(content).forEach(([label, text]) => {
           if (["tags", "shortcuts"].includes(label)) return;
-
+        
           const card = document.createElement("div");
           card.className = "card";
-
+        
           const rendered = text.replace(/\[([^\]]+)\]/g, (_, key) => {
             if (fieldValues[key] !== undefined) return fieldValues[key];
             if (hiddenFields[key] !== undefined) return hiddenFields[key];
             return `[${key}]`;
           });
-
+        
           card.addEventListener("click", () => {
-            navigator.clipboard.writeText(rendered).then(() => {
-              alert(`Copied: "${rendered}"`);
-            });
+            copyToClipboard(rendered);
           });
-
+        
           const cardLabel = document.createElement("div");
           cardLabel.className = "card-label";
           cardLabel.textContent = label;
-
+        
           const cardText = document.createElement("div");
           cardText.className = "card-text";
           cardText.textContent = rendered;
-
+        
           card.appendChild(cardLabel);
           card.appendChild(cardText);
           grid.appendChild(card);
         });
-
+      
         section.appendChild(grid);
         container.appendChild(section);
       });
     }
-
-    fetch("assets/json/snippets.json")
+    
+    fetch("snippets.json")
       .then(res => res.json())
       .then(json => {
         if (json.logo) {
