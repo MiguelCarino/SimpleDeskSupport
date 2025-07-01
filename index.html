@@ -437,7 +437,7 @@
       container.appendChild(section);
     });
   }
-  fetch("snippets.json")
+  fetch("assets/json/snippets.json")
         .then(res => res.json())
         .then(json => {
           if (json.logo) {
@@ -457,7 +457,7 @@
           adjustContainerOffset();
         })
         .catch(() => console.warn("snippets.json not found."));
-  const scriptURL = "https://script.google.com/a/macros/edenmed.com/s/AKfycbzT9wzNc_P0iHzzXyAGST-oVwFakA0_Ug81VlVCZvf_qqeof6ScuU2E8WfqPWsgV08ouQ/exec";
+  const scriptURL = "https://script.google.com/a/macros/test/s/custom/exec";
 
   document.getElementById("saveToSheetsBtn").addEventListener("click", () => {
     const data = {};
