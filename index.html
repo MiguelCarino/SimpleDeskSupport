@@ -210,7 +210,8 @@
   <div class="floating-header">
     <img id="logo" src="" alt="Logo" style="display:none;" />
     <h1>Customer Support</h1>
-    <div id="fieldInputsContainer" class="controls"></div>
+    <div id="fieldInputsContainer" class="controls"></div><button id="saveToSheetsBtn" title="Save to Google Sheets">📤 Save to Sheets</button>
+
     <button id="toggleNoteBtn" onclick="toggleNote()">📝 Note</button>
     <div id="noteArea">
       <textarea id="noteInput" placeholder="Add a note..." style="width:100%; height:60px; resize:vertical;"></textarea>
@@ -223,239 +224,296 @@
 
   <div class="container" id="snippetsContainer"></div>
 
-  <script>
-    let fieldValues = {};
-    let lastSnippets = {};
-    let hiddenFields = {};
-    let filters = {};
-    let noteValue = "";
-      
-    function adjustContainerOffset() {
-      const header = document.querySelector(".floating-header");
-      const container = document.querySelector(".container");
-      const height = header.offsetHeight;
-      container.style.paddingTop = (height + 20) + "px";
-    }
-    
-    window.addEventListener("load", adjustContainerOffset);
-    window.addEventListener("resize", adjustContainerOffset);
-    
-    document.getElementById("dropzone").addEventListener("click", () => document.getElementById("jsonUpload").click());
-    document.getElementById("dropzone").addEventListener("dragover", (e) => e.preventDefault());
-    document.getElementById("dropzone").addEventListener("drop", (e) => {
-      e.preventDefault();
-      const file = e.dataTransfer.files[0];
-      if (file) readJsonFile(file);
+<script>
+  let fieldValues = {};
+  let lastSnippets = {};
+  let hiddenFields = {};
+  let filters = {};
+  let noteValue = "";
+
+  function adjustContainerOffset() {
+    const header = document.querySelector(".floating-header");
+    const container = document.querySelector(".container");
+    const height = header.offsetHeight;
+    container.style.paddingTop = (height + 20) + "px";
+  }
+
+  window.addEventListener("load", adjustContainerOffset);
+  window.addEventListener("resize", adjustContainerOffset);
+
+  document.getElementById("dropzone").addEventListener("click", () => document.getElementById("jsonUpload").click());
+  document.getElementById("dropzone").addEventListener("dragover", (e) => e.preventDefault());
+  document.getElementById("dropzone").addEventListener("drop", (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) readJsonFile(file);
+  });
+
+  document.getElementById("jsonUpload").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) readJsonFile(file);
+  });
+
+  document.getElementById("downloadBtn").addEventListener("click", () => {
+    const output = structuredClone(lastSnippets);
+    output.fields = { ...fieldValues };
+    output.hidden = { ...hiddenFields };
+    output.filters = { ...filters };
+    output.note = document.getElementById("noteInput").value || "";
+
+    const json = JSON.stringify(output, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "snippets.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  function toggleNote() {
+    const noteDiv = document.getElementById("noteArea");
+    const isHidden = getComputedStyle(noteDiv).display === "none";
+    noteDiv.style.display = isHidden ? "block" : "none";
+    adjustContainerOffset();
+  }
+
+  function showNotification(message) {
+    const notification = document.createElement('div');
+    notification.className = 'notification';
+    notification.innerText = message;
+    document.body.appendChild(notification);
+    notification.style.display = 'block';
+    setTimeout(() => {
+      notification.style.display = 'none';
+      document.body.removeChild(notification);
+    }, 3000);
+  }
+
+  function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+      showNotification("✅ Copied to clipboard!");
+    }).catch(err => {
+      console.error("Clipboard error:", err);
+      showNotification("❌ Failed to copy.");
     });
-    
-    document.getElementById("jsonUpload").addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (file) readJsonFile(file);
+  }
+
+  function readJsonFile(file) {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result);
+        if (parsed.logo) {
+          const logo = document.getElementById("logo");
+          logo.src = parsed.logo;
+          logo.style.display = "block";
+        }
+        if (parsed.hidden) hiddenFields = parsed.hidden;
+        if (parsed.filters) filters = parsed.filters;
+        if (parsed.note) {
+          noteValue = parsed.note;
+          document.getElementById("noteInput").value = noteValue;
+        }
+        if (parsed.googleSheetFields && Array.isArray(parsed.googleSheetFields)) {
+          googleSheetFields = parsed.googleSheetFields;
+        }
+        document.getElementById("noteArea").style.display = noteValue ? "block" : "none";
+        if (parsed.fields) renderFields(parsed.fields);
+        lastSnippets = parsed;
+        renderSnippets(parsed);
+        adjustContainerOffset();
+      } catch (err) {
+        alert("Invalid JSON format.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function renderFields(fields) {
+    const container = document.getElementById("fieldInputsContainer");
+    container.innerHTML = "";
+    container.classList.toggle("column", Object.keys(fields).length > 4);
+
+    Object.entries(fields).forEach(([key, value]) => {
+      fieldValues[key] = value;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = key;
+      input.value = value;
+      input.addEventListener("input", (e) => {
+        let rawValue = e.target.value;
+        if (filters[key] && filters[key].regex) {
+          try {
+            const match = rawValue.match(new RegExp(filters[key].regex));
+            fieldValues[key] = match ? match[0] : rawValue;
+          } catch (err) {
+            fieldValues[key] = rawValue;
+          }
+        } else {
+          fieldValues[key] = rawValue;
+        }
+        renderSnippets(lastSnippets);
+      });
+      container.appendChild(input);
     });
-    
-    document.getElementById("downloadBtn").addEventListener("click", () => {
-      const output = structuredClone(lastSnippets);
-      output.fields = { ...fieldValues };
-      output.hidden = { ...hiddenFields };
-      output.filters = { ...filters };
-      output.note = document.getElementById("noteInput").value || "";
-    
-      const json = JSON.stringify(output, null, 2);
-      const blob = new Blob([json], { type: "application/json" });
+
+    adjustContainerOffset();
+  }
+
+  function renderSnippets(snippets) {
+    const container = document.getElementById("snippetsContainer");
+    container.innerHTML = "";
+
+    Object.entries(snippets).forEach(([category, content]) => {
+      if (["fields", "logo", "note", "hidden", "filters", "googleSheetFields"].includes(category)) return;
+
+      const section = document.createElement("div");
+      section.className = "category";
+
+      const title = document.createElement("h2");
+      title.textContent = category;
+      section.appendChild(title);
+
+      if (content.tags && Array.isArray(content.tags)) {
+        const tagWrap = document.createElement("div");
+        tagWrap.className = "tags";
+        content.tags.forEach(tag => {
+          const tagBtn = document.createElement("button");
+          tagBtn.textContent = tag;
+          tagWrap.appendChild(tagBtn);
+        });
+        section.appendChild(tagWrap);
+      }
+
+      if (content.shortcuts && Array.isArray(content.shortcuts)) {
+        const shortcutWrap = document.createElement("div");
+        shortcutWrap.className = "shortcuts";
+        content.shortcuts.forEach(shortcut => {
+          const a = document.createElement("a");
+          a.href = shortcut.url;
+          a.target = "_blank";
+          a.textContent = shortcut.label;
+          shortcutWrap.appendChild(a);
+        });
+        section.appendChild(shortcutWrap);
+      }
+
+      const grid = document.createElement("div");
+      grid.className = "grid";
+
+      Object.entries(content).forEach(([label, text]) => {
+        if (["tags", "shortcuts"].includes(label)) return;
+
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const rendered = text.replace(/\[([^\]]+)\]/g, (_, key) => {
+          if (fieldValues[key] !== undefined) return fieldValues[key];
+          if (hiddenFields[key] !== undefined) return hiddenFields[key];
+          return `[${key}]`;
+        });
+
+        card.addEventListener("click", () => {
+          copyToClipboard(rendered);
+        });
+
+        const cardLabel = document.createElement("div");
+        cardLabel.className = "card-label";
+        cardLabel.textContent = label;
+
+        const cardText = document.createElement("div");
+        cardText.className = "card-text";
+        cardText.textContent = rendered;
+
+        card.appendChild(cardLabel);
+        card.appendChild(cardText);
+        grid.appendChild(card);
+      });
+
+      section.appendChild(grid);
+      container.appendChild(section);
+    });
+  }
+  fetch("snippets.json")
+        .then(res => res.json())
+        .then(json => {
+          if (json.logo) {
+            const logo = document.getElementById("logo");
+            logo.src = json.logo;
+            logo.style.display = "block";
+          }
+          if (json.hidden) hiddenFields = json.hidden;
+          if (json.filters) filters = json.filters;
+          if (json.note) {
+            noteValue = json.note;
+            document.getElementById("noteInput").value = noteValue;
+          }
+          if (json.fields) renderFields(json.fields);
+          lastSnippets = json;
+          renderSnippets(json);
+          adjustContainerOffset();
+        })
+        .catch(() => console.warn("snippets.json not found."));
+  const scriptURL = "https://script.google.com/a/macros/edenmed.com/s/AKfycbzT9wzNc_P0iHzzXyAGST-oVwFakA0_Ug81VlVCZvf_qqeof6ScuU2E8WfqPWsgV08ouQ/exec";
+
+  document.getElementById("saveToSheetsBtn").addEventListener("click", () => {
+    const data = {};
+    googleSheetFields.forEach(k => {
+      if (k === "timestamp") {
+        data[k] = new Date().toISOString();
+      } else if (k === "timestamp") {
+        data[k] = new Date().toISOString();
+      } else if (k === "note") {
+        data[k] = document.getElementById("noteInput").value || "";
+      } else if (fieldValues.hasOwnProperty(k)) {
+        data[k] = fieldValues[k];
+      }
+    });
+
+    const now = new Date();
+    const timestamp = now.toISOString().replace(/[:.]/g, '-');
+    const csvLine = googleSheetFields.map(k => `"${data[k] || ''}"`).join(",");
+    const fallbackFilename = `fallback-${timestamp}-${googleSheetFields.map(k => sanitize(data[k])).join("-")}.txt`;
+
+    console.log("Attempting to save to Google Sheets", { scriptURL, data });
+
+    fetch(scriptURL, {
+      method: "POST",
+      body: JSON.stringify(data),
+      headers: {
+        "Content-Type": "application/json"
+      }
+    })
+    .then(res => {
+      console.log("Google Sheets response status:", res.status);
+      return res.text();
+    })
+    .then(response => {
+      console.log("Google Sheets response text:", response);
+      showNotification("✅ Saved to Google Sheets!");
+    })
+    .catch(err => {
+      console.error("❌ Google Sheets save error:", err);
+      const blob = new Blob([csvLine], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "snippets.json";
+      a.download = fallbackFilename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      showNotification("📄 Fallback saved as .txt (CSV format)");
     });
-    
-    function toggleNote() {
-      const noteDiv = document.getElementById("noteArea");
-      const isHidden = getComputedStyle(noteDiv).display === "none";
-      noteDiv.style.display = isHidden ? "block" : "none";
-      adjustContainerOffset();
-    }
-    
-    // Function to show a notification
-    function showNotification(message) {
-      const notification = document.createElement('div');
-      notification.className = 'notification';
-      notification.innerText = message;
-      document.body.appendChild(notification);
-      notification.style.display = 'block';
-      setTimeout(() => {
-        notification.style.display = 'none';
-        document.body.removeChild(notification);
-      }, 3000);
-    }
-    
-    // Function to copy text to clipboard
-    function copyToClipboard(text) {
-      navigator.clipboard.writeText(text).then(() => {
-        showNotification("✅ Copied to clipboard!");
-      }).catch(err => {
-        console.error("Clipboard error:", err);
-        showNotification("❌ Failed to copy.");
-      });
-    }
-    
-    function readJsonFile(file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const parsed = JSON.parse(event.target.result);
-          if (parsed.logo) {
-            const logo = document.getElementById("logo");
-            logo.src = parsed.logo;
-            logo.style.display = "block";
-          }
-          if (parsed.hidden) hiddenFields = parsed.hidden;
-          if (parsed.filters) filters = parsed.filters;
-          if (parsed.note) {
-            noteValue = parsed.note;
-            document.getElementById("noteInput").value = noteValue;
-          }
-          document.getElementById("noteArea").style.display = noteValue ? "block" : "none";
-          if (parsed.fields) renderFields(parsed.fields);
-          lastSnippets = parsed;
-          renderSnippets(parsed);
-          adjustContainerOffset();
-        } catch (err) {
-          alert("Invalid JSON format.");
-        }
-      };
-      reader.readAsText(file);
-    }
-    
-    function renderFields(fields) {
-      const container = document.getElementById("fieldInputsContainer");
-      container.innerHTML = "";
-      container.classList.toggle("column", Object.keys(fields).length > 4);
-    
-      Object.entries(fields).forEach(([key, value]) => {
-        fieldValues[key] = value;
-        const input = document.createElement("input");
-        input.type = "text";
-        input.placeholder = key;
-        input.value = value;
-        input.addEventListener("input", (e) => {
-          let rawValue = e.target.value;
-          if (filters[key] && filters[key].regex) {
-            try {
-              const match = rawValue.match(new RegExp(filters[key].regex));
-              fieldValues[key] = match ? match[0] : rawValue;
-            } catch (err) {
-              fieldValues[key] = rawValue;
-            }
-          } else {
-            fieldValues[key] = rawValue;
-          }
-          renderSnippets(lastSnippets);
-        });
-        container.appendChild(input);
-      });
-    
-      adjustContainerOffset();
-    }
-    
-    function renderSnippets(snippets) {
-      const container = document.getElementById("snippetsContainer");
-      container.innerHTML = "";
-    
-      Object.entries(snippets).forEach(([category, content]) => {
-        if (["fields", "logo", "note", "hidden", "filters"].includes(category)) return;
-      
-        const section = document.createElement("div");
-        section.className = "category";
-      
-        const title = document.createElement("h2");
-        title.textContent = category;
-        section.appendChild(title);
-      
-        if (content.tags && Array.isArray(content.tags)) {
-          const tagWrap = document.createElement("div");
-          tagWrap.className = "tags";
-          content.tags.forEach(tag => {
-            const tagBtn = document.createElement("button");
-            tagBtn.textContent = tag;
-            tagWrap.appendChild(tagBtn);
-          });
-          section.appendChild(tagWrap);
-        }
-      
-        if (content.shortcuts && Array.isArray(content.shortcuts)) {
-          const shortcutWrap = document.createElement("div");
-          shortcutWrap.className = "shortcuts";
-          content.shortcuts.forEach(shortcut => {
-            const a = document.createElement("a");
-            a.href = shortcut.url;
-            a.target = "_blank";
-            a.textContent = shortcut.label;
-            shortcutWrap.appendChild(a);
-          });
-          section.appendChild(shortcutWrap);
-        }
-      
-        const grid = document.createElement("div");
-        grid.className = "grid";
-      
-        Object.entries(content).forEach(([label, text]) => {
-          if (["tags", "shortcuts"].includes(label)) return;
-        
-          const card = document.createElement("div");
-          card.className = "card";
-        
-          const rendered = text.replace(/\[([^\]]+)\]/g, (_, key) => {
-            if (fieldValues[key] !== undefined) return fieldValues[key];
-            if (hiddenFields[key] !== undefined) return hiddenFields[key];
-            return `[${key}]`;
-          });
-        
-          card.addEventListener("click", () => {
-            copyToClipboard(rendered);
-          });
-        
-          const cardLabel = document.createElement("div");
-          cardLabel.className = "card-label";
-          cardLabel.textContent = label;
-        
-          const cardText = document.createElement("div");
-          cardText.className = "card-text";
-          cardText.textContent = rendered;
-        
-          card.appendChild(cardLabel);
-          card.appendChild(cardText);
-          grid.appendChild(card);
-        });
-      
-        section.appendChild(grid);
-        container.appendChild(section);
-      });
-    }
-    
-    fetch("assets/json/snippets.json")
-      .then(res => res.json())
-      .then(json => {
-        if (json.logo) {
-          const logo = document.getElementById("logo");
-          logo.src = json.logo;
-          logo.style.display = "block";
-        }
-        if (json.hidden) hiddenFields = json.hidden;
-        if (json.filters) filters = json.filters;
-        if (json.note) {
-          noteValue = json.note;
-          document.getElementById("noteInput").value = noteValue;
-        }
-        if (json.fields) renderFields(json.fields);
-        lastSnippets = json;
-        renderSnippets(json);
-        adjustContainerOffset();
-      })
-      .catch(() => console.warn("snippets.json not found."));
-  </script>
+  });
+
+  function sanitize(str) {
+    return String(str || "").replace(/[^a-z0-9\-]/gi, "_").replace(/_+/g, "_").substring(0, 20);
+  }
+</script>
+
 </body>
 </html>

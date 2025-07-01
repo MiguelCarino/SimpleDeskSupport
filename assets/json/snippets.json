@@ -1,6 +1,7 @@
 {
   "logo": "https://carino.systems/assets/images/logo.webp",
   "note": "This is a shared note across the session.\nFeel free to include multiline content.",
+  "googleSheetFields": ["timestamp", "client", "agent", "order"],
   "fields": {
     "client": "Carino Systems",
     "order": "https://example.com/orders/1234567890",
