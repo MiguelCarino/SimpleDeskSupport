@@ -15,6 +15,7 @@
     .floating-header {
       position: fixed;
       top: 0;
+      left: 0;
       width: 100%;
       background: #737373;
       z-index: 999;
@@ -24,6 +25,12 @@
       align-items: center;
       gap: 20px;
       flex-wrap: wrap;
+      transition: left 0.3s ease, width 0.3s ease;
+    }
+
+    body.sidebar-mode .floating-header {
+      left: 260px;
+      width: calc(100% - 260px);
     }
 
     .floating-header img {
@@ -37,13 +44,31 @@
 
     #fieldInputsContainer {
       display: flex;
-      gap: 10px;
       flex-wrap: wrap;
+      gap: 10px;
+      flex-direction: row; /* default horizontal layout */
     }
 
-    #fieldInputsContainer.controls.column {
-      flex-direction: row;
-      align-items: flex-start;
+    #fieldInputsContainer.sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 260px;
+      padding: 10px;
+      background: #1a1a1a;
+      flex-direction: column; /* only sidebar is vertical */
+      flex-wrap: nowrap;
+      overflow-y: auto;
+      z-index: 900;
+    }
+
+    body.sidebar-mode .container {
+      margin-left: 260px;
+    }
+
+    #sidebarSpacer {
+      transition: height 0.2s ease;
     }
 
     input[type="text"] {
@@ -104,9 +129,12 @@
     }
 
     .container {
-      max-width: 1100px;
+      max-width: 100%;
       margin: 0 auto;
-      padding: 120px 20px 40px 20px;
+      padding: 30px; /* top padding will be overwritten by JS */
+      padding-top: 90px;
+      transition: padding-top 0.2s ease;
+      padding: 120px 20px 40px 20px; /* Fallback top padding for header */
     }
 
     .category {
@@ -207,11 +235,11 @@
   </style>
 </head>
 <body>
-  <div class="floating-header">
+  <div class="floating-header"><button id="toggleLayoutBtn">↕️ Toggle Layout</button>
     <img id="logo" src="" alt="Logo" style="display:none;" />
     <h1>Customer Support</h1>
     <div id="fieldInputsContainer" class="controls"></div><button id="saveToSheetsBtn" title="Save to Google Sheets">📤 Save to Sheets</button>
-
+    <button id="clearFieldsBtn">🧹 Clear Fields</button>
     <button id="toggleNoteBtn" onclick="toggleNote()">📝 Note</button>
     <div id="noteArea">
       <textarea id="noteInput" placeholder="Add a note..." style="width:100%; height:60px; resize:vertical;"></textarea>
@@ -221,6 +249,7 @@
   <div id="dropzone" title="Click or drop JSON">JSON</div>
   <button id="downloadBtn" title="Download current JSON">⬇</button>
   <input type="file" id="jsonUpload" accept=".json" />
+  <div id="sidebarSpacer" style="display: none; height: 0;"></div>
 
   <div class="container" id="snippetsContainer"></div>
 
@@ -230,6 +259,9 @@
   let hiddenFields = {};
   let filters = {};
   let noteValue = "";
+  let isVerticalLayout = false;
+  let sidebarMode = false;
+
 
   function adjustContainerOffset() {
     const header = document.querySelector(".floating-header");
@@ -248,6 +280,56 @@
     const file = e.dataTransfer.files[0];
     if (file) readJsonFile(file);
   });
+
+  document.getElementById("clearFieldsBtn").addEventListener("click", () => {
+    const inputs = document.querySelectorAll("#fieldInputsContainer input");
+    inputs.forEach(input => {
+      const fieldName = input.placeholder;
+      if (!(fieldName in hiddenFields)) {
+        input.value = "";
+        fieldValues[fieldName] = "";
+      }
+    });
+    renderSnippets(lastSnippets); // Update cards
+    showNotification("🧹 Fields cleared!");
+  });
+
+  document.getElementById("toggleLayoutBtn").addEventListener("click", () => {
+  const container = document.getElementById("fieldInputsContainer");
+  const spacer = document.getElementById("sidebarSpacer");
+
+  sidebarMode = !sidebarMode;
+  container.classList.toggle("sidebar", sidebarMode);
+  document.body.classList.toggle("sidebar-mode", sidebarMode);
+
+  if (sidebarMode) {
+    spacer.style.display = "block";
+    spacer.style.height = "60px"; // Adjust based on sidebar height
+  } else {
+    spacer.style.display = "none";
+    spacer.style.height = "0";
+  }
+
+  adjustContainerOffset(); // Still useful if other offsets apply
+});
+
+
+  function adjustContainerOffset() {
+    const header = document.querySelector(".floating-header");
+    const note = document.getElementById("noteArea");
+    const container = document.querySelector(".container");
+
+    const headerHeight = header?.offsetHeight || 0;
+    const noteHeight = (note && getComputedStyle(note).display !== "none") ? note.offsetHeight : 0;
+
+    const totalOffset = headerHeight + noteHeight + 20; // 20px buffer
+    container.style.paddingTop = sidebarMode ? "20px" : `${totalOffset}px`;
+  }
+
+  function updateClearButtonState() {
+    const hasVisibleFields = Object.keys(fieldValues).some(f => !(f in hiddenFields));
+    document.getElementById("clearFieldsBtn").disabled = !hasVisibleFields;
+  }
 
   document.getElementById("jsonUpload").addEventListener("change", (e) => {
     const file = e.target.files[0];
@@ -278,6 +360,14 @@
     const isHidden = getComputedStyle(noteDiv).display === "none";
     noteDiv.style.display = isHidden ? "block" : "none";
     adjustContainerOffset();
+  }
+
+  
+  function adjustContainerOffset() {
+    const header = document.querySelector(".floating-header");
+    const container = document.querySelector(".container");
+    const height = header.offsetHeight;
+    container.style.paddingTop = sidebarMode ? "20px" : (height + 20) + "px";
   }
 
   function showNotification(message) {
@@ -457,6 +547,7 @@
           adjustContainerOffset();
         })
         .catch(() => console.warn("snippets.json not found."));
+        
   const scriptURL = "https://script.google.com/a/macros/test/s/custom/exec";
 
   document.getElementById("saveToSheetsBtn").addEventListener("click", () => {
