@@ -53,7 +53,7 @@
       height: 35px; background: var(--bg-nav);
       display: flex; align-items: flex-end;
       padding-left: 0; border-bottom: 1px solid var(--border);
-      user-select: none; padding-right: 10px;
+      user-select: none; padding-right: 15px;
     }
 
     .tab {
@@ -85,8 +85,20 @@
     }
     #new-tab-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
 
+    /* Right Controls (Lang + Info) */
+    .top-right-controls {
+      margin-left: auto; display: flex; align-items: center; gap: 10px; height: 100%;
+    }
+
+    #lang-select {
+      background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+      color: #ccc; font-size: 11px; border-radius: 4px; padding: 2px 5px;
+      outline: none; cursor: pointer; height: 24px; margin-bottom: 5px;
+    }
+    #lang-select:hover { border-color: var(--accent); color: #fff; }
+
     #info-btn {
-      margin-left: auto; width: 24px; height: 24px;
+      width: 24px; height: 24px;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer; color: #888; border-radius: 4px;
       font-size: 14px; margin-bottom: 5px;
@@ -236,11 +248,11 @@
 
   <div id="about-overlay">
     <div class="about-card">
-      <h2>Simple DeskSupport</h2>
-      <p>A simple multi-session customer support console designed to streamline snippet management and workflow tracking for everyone without a CRM/Helpdesk integration.</p>
+      <h2>Support IDE</h2>
+      <p>A high-efficiency, multi-session customer support console designed to streamline snippet management and workflow tracking.</p>
       <div class="social-btns">
-        <a href="https://github.com/MiguelCarino/SimpleDeskSupport" target="_blank" class="social-btn btn-gh">GitHub</a>
-        <a href="https://www.linkedin.com/in/miguelcarino94/" target="_blank" class="social-btn btn-li">LinkedIn</a>
+        <a href="https://github.com" target="_blank" class="social-btn btn-gh">GitHub</a>
+        <a href="https://linkedin.com" target="_blank" class="social-btn btn-li">LinkedIn</a>
       </div>
       <div class="close-overlay" onclick="toggleAbout()">Close</div>
     </div>
@@ -249,7 +261,13 @@
   <div id="top-bar">
     <div id="tabs-container" style="display:flex;"></div>
     <div id="new-tab-btn" title="New Ticket">+</div>
-    <div id="info-btn" onclick="toggleAbout()">ⓘ</div>
+    
+    <div class="top-right-controls">
+      <select id="lang-select">
+        <option value="en">EN</option>
+      </select>
+      <div id="info-btn" onclick="toggleAbout()">ⓘ</div>
+    </div>
   </div>
 
   <div id="command-palette">
@@ -308,6 +326,8 @@
   let snippetConfig = {}; 
   let filters = {};
   let hiddenFields = {};
+  let currentLang = "en"; // Default
+  let defaultLangFallback = "en";
 
   const LS_CONFIG = "support_ide_config";
   const LS_SESSIONS = "support_ide_sessions";
@@ -315,15 +335,16 @@
 
   // --- INIT ---
   window.addEventListener('load', () => {
+    // 1. Config
     const savedConfig = localStorage.getItem(LS_CONFIG);
     if(savedConfig) {
       try {
         const json = JSON.parse(savedConfig);
-        // Load config without reset
         loadConfigInternal(json, false);
       } catch(e) { console.error("Config corrupt", e); }
     }
 
+    // 2. Sessions
     const savedSessions = localStorage.getItem(LS_SESSIONS);
     const savedActive = localStorage.getItem(LS_ACTIVE);
     
@@ -334,7 +355,7 @@
       renderTabs();
       switchTab(activeSessionId);
     } else {
-      createNewSession(true); // Defaults for fresh load
+      createNewSession(true);
     }
   });
 
@@ -344,7 +365,66 @@
     localStorage.setItem(LS_ACTIVE, activeSessionId);
   }, 2000);
 
-  // --- LOGIC ---
+  // --- LANGUAGE ENGINE ---
+  function initLanguageSelector(config) {
+    const select = document.getElementById("lang-select");
+    select.innerHTML = ""; 
+
+    let langs = ["en"];
+    if(config.config) {
+        if(config.config.supportedLangs) langs = config.config.supportedLangs;
+        if(config.config.defaultLang) {
+            defaultLangFallback = config.config.defaultLang;
+            // Only set current if not already set by previous load or user action (if persistence desired)
+            if(!currentLang) currentLang = defaultLangFallback;
+        }
+    }
+    // ensure currentLang is valid
+    if(!langs.includes(currentLang)) currentLang = defaultLangFallback;
+
+    langs.forEach(code => {
+        const opt = document.createElement("option");
+        opt.value = code;
+        opt.innerText = code.toUpperCase();
+        select.appendChild(opt);
+    });
+
+    select.value = currentLang;
+    
+    select.addEventListener("change", (e) => {
+        currentLang = e.target.value;
+        refreshUI();
+    });
+  }
+
+  // Fallback Logic: Specific Lang -> Default Lang -> First Avail -> Raw String
+  function getLocalizedText(obj) {
+    if (typeof obj === 'string') return obj; // Not translated
+    if (!obj) return "";
+    
+    if(obj[currentLang]) return obj[currentLang];
+    if(obj[defaultLangFallback]) return obj[defaultLangFallback];
+    
+    const keys = Object.keys(obj);
+    if(keys.length > 0) return obj[keys[0]];
+    return "";
+  }
+  
+  // New helper: Translates Keys (Headers/Titles) using Dictionary
+  function translateKey(key) {
+    if(snippetConfig.dictionary && snippetConfig.dictionary[key]) {
+        return getLocalizedText(snippetConfig.dictionary[key]);
+    }
+    return key;
+  }
+
+  function refreshUI() {
+    if(snippetConfig.dictionary) applyUILabels(snippetConfig.dictionary);
+    renderSnippets(); // Updates content AND headers
+    const session = sessions.find(s => s.id === activeSessionId);
+    if(session) updateNoteHeader(session.title);
+  }
+
   function applyTheme(theme) {
     const root = document.documentElement;
     if(theme.nav) root.style.setProperty('--bg-nav', theme.nav);
@@ -356,24 +436,28 @@
     if(theme.textHeader) root.style.setProperty('--text-header', theme.textHeader);
   }
 
-  function applyUILabels(ui) {
-    if(!ui) return;
+  function applyUILabels(dict) {
+    if(!dict) return;
     const map = {
-        "btn-load": ui.btnLoad, "btn-backup": ui.btnBackup, "btn-save": ui.btnSave, "btn-clear": ui.btnClear,
-        "search-box": ui.searchPlaceholder, "note-input": ui.notesPlaceholder 
+        "btn-load": dict.btnLoad, "btn-backup": dict.btnBackup, "btn-save": dict.btnSave, "btn-clear": dict.btnClear,
+        "search-box": dict.searchPlaceholder, "note-input": dict.notesPlaceholder 
     };
+
     Object.keys(map).forEach(id => {
         const el = document.getElementById(id);
-        if(el && map[id]) {
-            if(el.tagName === "INPUT" || el.tagName === "TEXTAREA") el.placeholder = map[id];
-            else el.innerText = map[id];
+        const text = getLocalizedText(map[id]);
+        if(el && text) {
+            if(el.tagName === "INPUT" || el.tagName === "TEXTAREA") el.placeholder = text;
+            else el.innerText = text;
         }
     });
-    if(ui.statusOngoing) document.querySelector("option[value='ongoing']").innerText = ui.statusOngoing;
-    if(ui.statusPending) document.querySelector("option[value='pending']").innerText = ui.statusPending;
-    if(ui.statusDone) document.querySelector("option[value='done']").innerText = ui.statusDone;
+    
+    if(dict.statusOngoing) document.querySelector("option[value='ongoing']").innerText = getLocalizedText(dict.statusOngoing);
+    if(dict.statusPending) document.querySelector("option[value='pending']").innerText = getLocalizedText(dict.statusPending);
+    if(dict.statusDone) document.querySelector("option[value='done']").innerText = getLocalizedText(dict.statusDone);
   }
 
+  // --- GENERAL UI ---
   function toggleAbout() { document.getElementById("about-overlay").classList.toggle("open"); }
   document.getElementById("about-overlay").addEventListener("click", (e) => { if(e.target.id === "about-overlay") toggleAbout(); });
 
@@ -383,7 +467,7 @@
     setTimeout(() => el.classList.remove("show"), 2000);
   }
 
-  // --- TABS & SESSIONS ---
+  // --- TABS ---
   function createNewSession(useDefaults = false) {
     const id = Date.now();
     const newSession = { id: id, title: `Ticket ${sessions.length + 1}`, status: 'ongoing', data: {}, note: "" };
@@ -403,26 +487,21 @@
   }
 
   function switchTab(id) {
-    // Save current state ONLY if we have a valid active session.
-    // When loading a backup, activeSessionId is set to null first to PREVENT this save.
     if (activeSessionId) saveCurrentStateToMemory();
-    
     activeSessionId = id;
     const session = sessions.find(s => s.id === id);
     if(!session) return; 
 
-    // Populate inputs from Session Data
+    // Restore UI Inputs
     const inputsContainer = document.getElementById("dynamic-inputs");
     const inputs = inputsContainer.querySelectorAll("input");
     
-    // If inputs exist (from config load), fill them
     if(inputs.length > 0 && snippetConfig.fields) {
         inputs.forEach(input => {
           const key = input.getAttribute("data-key");
           input.value = session.data[key] !== undefined ? session.data[key] : "";
         });
     } else if (snippetConfig.fields) {
-        // Fallback: build if missing
         renderSidebarInputs(snippetConfig.fields);
     }
 
@@ -430,7 +509,7 @@
     document.getElementById("status-select").value = session.status;
     updateNoteHeader(session.title);
     renderTabs();
-    renderSnippets(); 
+    refreshUI(); 
   }
 
   function saveCurrentStateToMemory() {
@@ -444,7 +523,7 @@
 
   function closeTab(e, id) {
     e.stopPropagation();
-    if (sessions.length === 1) return alert("Cannot close the last tab.");
+    if (sessions.length === 1) return alert("Cannot close last tab");
     const index = sessions.findIndex(s => s.id === id);
     sessions.splice(index, 1);
     if (id === activeSessionId) switchTab(sessions[Math.max(0, index - 1)].id);
@@ -473,7 +552,7 @@
     Object.keys(session.data).forEach(k => { if(!hiddenFields[k]) session.data[k] = ""; });
     const inputs = document.querySelectorAll("#dynamic-inputs input");
     inputs.forEach(input => input.value = "");
-    renderSnippets(); showToast("Fields Cleared");
+    renderSnippets(); showToast("Cleared");
   });
 
   document.getElementById("status-select").addEventListener("change", (e) => {
@@ -486,7 +565,10 @@
   });
 
   function updateNoteHeader(title) {
-    const headerText = snippetConfig.ui && snippetConfig.ui.notesHeader ? snippetConfig.ui.notesHeader : "📝 Notes";
+    let headerText = "📝 Notes";
+    if(snippetConfig.dictionary && snippetConfig.dictionary.notesHeader) {
+        headerText = getLocalizedText(snippetConfig.dictionary.notesHeader);
+    }
     document.getElementById("note-header-text").innerText = `${headerText} - ${title}`;
   }
 
@@ -497,17 +579,17 @@
     });
   });
 
-  // --- FILE LOADERS ---
+  // --- FILE HANDLING ---
   function loadConfigInternal(json, hardReset = true) {
-    if(hardReset) activeSessionId = null; // Important: detach session to prevent overwrite
+    if(hardReset) activeSessionId = null; 
 
     snippetConfig = json;
     hiddenFields = json.hidden || {};
     filters = json.filters || {};
     
-    if(json.theme) applyTheme(json.theme);
-    if(json.ui) applyUILabels(json.ui);
+    initLanguageSelector(json);
 
+    if(json.theme) applyTheme(json.theme);
     localStorage.setItem(LS_CONFIG, JSON.stringify(json));
     document.getElementById("welcome-msg").style.display = "none";
     
@@ -515,10 +597,11 @@
 
     if(hardReset) {
       sessions = [];
-      createNewSession(true); // Load defaults
+      createNewSession(true); 
     } else {
         if(activeSessionId) switchTab(activeSessionId);
     }
+    refreshUI(); 
   }
 
   function readJsonFile(file) {
@@ -528,13 +611,9 @@
         const json = JSON.parse(e.target.result);
         if(json.appType === "workspace_backup") {
           if(confirm("Restore Backup?")) {
-             // 1. Reset ID to prevent 'switchTab' from saving over data
              activeSessionId = null; 
-             // 2. Load Config
              loadConfigInternal(json.config, false); 
-             // 3. Restore Sessions
              sessions = json.sessions;
-             // 4. Switch safely
              switchTab(json.activeId);
              showToast("Backup Restored");
           }
@@ -566,12 +645,12 @@
       input.type = "text"; input.className = "input-std";
       input.setAttribute("data-key", key);
       
-      // If we are mid-restore or no session exists, use default temporarily
       let valueToSet = defaultVal;
       if (session) {
           if (session.data[key] === undefined) session.data[key] = "";
           valueToSet = session.data[key];
-      }
+      } else { valueToSet = defaultVal; }
+      
       input.value = valueToSet;
 
       input.addEventListener("input", (e) => {
@@ -594,16 +673,29 @@
 
     const session = sessions.find(s => s.id === activeSessionId);
     const safeData = session ? session.data : {};
-    const ignore = ["fields", "logo", "note", "hidden", "filters", "googleSheetFields", "theme", "ui"];
+    
+    // Reserved Keys
+    const ignore = ["fields", "logo", "note", "hidden", "filters", "googleSheetFields", "theme", "ui", "dictionary", "config"];
 
-    Object.entries(snippetConfig).forEach(([cat, content]) => {
-      if(ignore.includes(cat)) return;
+    Object.entries(snippetConfig).forEach(([catKey, content]) => {
+      if(ignore.includes(catKey)) return;
+      
+      // TRANSLATE CATEGORY HEADER
+      const headerText = translateKey(catKey);
+
       const header = document.createElement("div");
-      header.className = "category-header"; header.textContent = cat; container.appendChild(header);
+      header.className = "category-header"; header.textContent = headerText; container.appendChild(header);
       const grid = document.createElement("div"); grid.className = "grid";
 
-      Object.entries(content).forEach(([label, text]) => {
-        if(["tags", "shortcuts"].includes(label)) return;
+      Object.entries(content).forEach(([labelKey, value]) => {
+        if(["tags", "shortcuts"].includes(labelKey)) return;
+        
+        // TRANSLATE CARD TITLE
+        const labelText = translateKey(labelKey);
+
+        // GET LOCALIZED CONTENT
+        let text = getLocalizedText(value);
+
         const card = document.createElement("div"); card.className = "card";
         
         const displayHtml = text.replace(/\[([^\]]+)\]/g, (_, k) => {
@@ -614,7 +706,7 @@
           return safeData[k] || (hiddenFields && hiddenFields[k]) || `[${k}]`;
         });
         
-        card.innerHTML = `<strong>${label}</strong>${displayHtml}`;
+        card.innerHTML = `<strong>${labelText}</strong>${displayHtml}`;
         card.onclick = () => {
           navigator.clipboard.writeText(rawText);
           showToast("📋 Copied!");
@@ -627,7 +719,7 @@
     if(searchVal) document.getElementById("search-box").dispatchEvent(new Event('input'));
   }
 
-  // --- EXPORT ---
+  // --- ACTIONS ---
   document.getElementById("btn-backup").addEventListener("click", () => {
     saveCurrentStateToMemory();
     const backup = { appType: "workspace_backup", timestamp: new Date().toISOString(), config: snippetConfig, sessions: sessions, activeId: activeSessionId };
