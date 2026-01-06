@@ -3,608 +3,670 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Customer Support</title>
+  <title>Support IDE</title>
   <style>
+    :root {
+      /* Themeable Colors */
+      --bg-nav: #252526;
+      --bg-sidebar: #252526;
+      --bg-content: #1e1e1e;
+      --bg-notes: #1e1e1e;
+      --accent: #E91E63;
+      --text-main: #e0e0e0;
+      --text-header: #ffffff;
+      
+      /* Static Colors */
+      --border: #3e3e42;
+      --status-ongoing: #007acc;
+      --status-pending: #d19a66;
+      --status-done: #6a9955;
+      --tab-inactive: rgba(0,0,0,0.2);
+      --tab-active: var(--bg-content);
+    }
+
+    * { box-sizing: border-box; }
+
     body {
+      margin: 0; padding: 0;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(to right, #282828, #000000);
-      margin: 0;
-      padding: 0;
+      background: var(--bg-content);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      transition: color 0.2s, background 0.2s;
     }
 
-    .floating-header {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      background: #737373;
-      z-index: 999;
-      padding: 10px 20px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      flex-wrap: wrap;
-      transition: left 0.3s ease, width 0.3s ease;
+    /* --- UI COMPONENTS --- */
+    #notification-toast {
+      position: fixed; top: 20px; right: 20px;
+      background: var(--status-done); color: white;
+      padding: 10px 20px; border-radius: 4px;
+      font-weight: 600; font-size: 13px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 9999; opacity: 0; pointer-events: none;
+      transform: translateY(-10px); transition: all 0.2s ease;
+    }
+    #notification-toast.show { opacity: 1; transform: translateY(0); }
+
+    /* Top Bar */
+    #top-bar {
+      height: 35px; background: var(--bg-nav);
+      display: flex; align-items: flex-end;
+      padding-left: 0; border-bottom: 1px solid var(--border);
+      user-select: none; padding-right: 10px;
     }
 
-    body.sidebar-mode .floating-header {
-      left: 260px;
-      width: calc(100% - 260px);
+    .tab {
+      height: 35px; padding: 0 15px; display: flex; align-items: center;
+      gap: 8px; background: var(--tab-inactive); color: #888;
+      font-size: 12px; cursor: pointer; border-right: 1px solid var(--border);
+      min-width: 120px; max-width: 200px; position: relative;
+    }
+    .tab.active {
+      background: var(--tab-active); color: var(--text-header);
+      border-top: 2px solid var(--accent);
+      border-bottom: 1px solid var(--bg-content); margin-bottom: -1px;
+    }
+    .tab.status-ongoing.active { border-top-color: var(--status-ongoing); }
+    .tab.status-pending.active { border-top-color: var(--status-pending); }
+    .tab.status-done.active    { border-top-color: var(--status-done); }
+
+    .tab-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
+    .tab.status-ongoing .tab-status-dot { background: var(--status-ongoing); }
+    .tab.status-pending .tab-status-dot { background: var(--status-pending); }
+    .tab.status-done .tab-status-dot    { background: var(--status-done); }
+
+    .tab-close { margin-left: auto; font-size: 14px; padding: 2px 4px; border-radius: 2px; }
+    .tab-close:hover { background: #444; color: #fff; }
+
+    #new-tab-btn {
+      height: 35px; width: 35px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: #aaa; font-size: 18px;
+    }
+    #new-tab-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+
+    #info-btn {
+      margin-left: auto; width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: #888; border-radius: 4px;
+      font-size: 14px; margin-bottom: 5px;
+    }
+    #info-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+    /* Search */
+    #command-palette {
+      height: 40px; display: flex; align-items: center; padding: 0 10px;
+      border-bottom: 1px solid var(--border); background: var(--bg-content);
+    }
+    #search-box {
+      width: 100%; background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border); color: var(--text-main);
+      padding: 6px 10px; font-size: 13px; border-radius: 2px; outline: none;
+    }
+    #search-box:focus { border-color: var(--accent); }
+
+    /* Layout */
+    #workspace { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+    #sidebar {
+      width: 300px; background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; flex-shrink: 0;
     }
 
-    .floating-header img {
-      height: 30px;
+    .sidebar-section { padding: 15px; overflow-y: auto; flex: 1; }
+    .control-group { margin-bottom: 12px; }
+    .control-group label {
+      display: block; font-size: 11px; text-transform: uppercase;
+      color: var(--text-main); opacity: 0.7; margin-bottom: 4px; font-weight: 600;
+    }
+    .input-std {
+      width: 100%; background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border); color: var(--text-main);
+      padding: 6px 8px; font-size: 12px; outline: none;
+    }
+    .input-std:focus { border-color: var(--accent); }
+
+    .sidebar-footer {
+      padding: 10px; background: rgba(0,0,0,0.2);
+      border-top: 1px solid var(--border);
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    }
+    .full-span { grid-column: span 2; }
+
+    .btn {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border); color: var(--text-main);
+      padding: 8px 10px; font-size: 11px; cursor: pointer;
+      text-align: center; text-transform: uppercase;
+      font-weight: 600; transition: background 0.1s;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .btn:hover { background: rgba(255,255,255,0.1); color: var(--text-header); }
+    .btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+
+    #content-area {
+      flex: 1; padding: 20px; overflow-y: auto;
+      background: var(--bg-content); padding-bottom: 200px;
     }
 
-    .floating-header h1 {
-      color: #fff;
-      margin: 0;
+    .category-header {
+      font-size: 13px; font-weight: bold; color: var(--accent);
+      border-bottom: 1px solid var(--border); padding-bottom: 5px;
+      margin-top: 20px; margin-bottom: 10px; text-transform: uppercase;
     }
-
-    #fieldInputsContainer {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      flex-direction: row; /* default horizontal layout */
-    }
-
-    #fieldInputsContainer.sidebar {
-      position: fixed;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 260px;
-      padding: 10px;
-      background: #1a1a1a;
-      flex-direction: column; /* only sidebar is vertical */
-      flex-wrap: nowrap;
-      overflow-y: auto;
-      z-index: 900;
-    }
-
-    body.sidebar-mode .container {
-      margin-left: 260px;
-    }
-
-    #sidebarSpacer {
-      transition: height 0.2s ease;
-    }
-
-    input[type="text"] {
-      padding: 8px;
-      font-size: 14px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-    }
-
-    #noteArea {
-      width: 80%;
-      margin-top: 10px;
-      display: none;
-    }
-
-    #noteInput {
-      width: 100%;
-      padding: 6px;
-      margin-top: 5px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-    }
-
-    #dropzone {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      width: 42px;
-      height: 40px;
-      border: 2px dashed #aaa;
-      border-radius: 6px;
-      text-align: center;
-      line-height: 36px;
-      font-size: 10px;
-      color: #aaa;
-      cursor: pointer;
-      z-index: 1000;
-    }
-
-    #downloadBtn {
-      position: fixed;
-      top: 10px;
-      right: 60px;
-      padding: 6px 10px;
-      height: 45px;
-      width: 45px;
-      font-size: 12px;
-      background: #222;
-      color: white;
-      border: 1px solid #444;
-      border-radius: 4px;
-      cursor: pointer;
-      z-index: 1000;
-    }
-
-    #jsonUpload {
-      display: none;
-    }
-
-    .container {
-      max-width: 100%;
-      margin: 0 auto;
-      padding: 30px; /* top padding will be overwritten by JS */
-      padding-top: 90px;
-      transition: padding-top 0.2s ease;
-      padding: 120px 20px 40px 20px; /* Fallback top padding for header */
-    }
-
-    .category {
-      margin-bottom: 30px;
-    }
-
-    .category h2 {
-      margin-bottom: 12px;
-      color: #ffffff;
-      border-bottom: 2px solid #eee;
-      padding-bottom: 5px;
-    }
+    .category-header:first-child { margin-top: 0; }
 
     .grid {
-      display: grid;
-      gap: 15px;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 10px;
     }
 
     .card {
-      background: #000;
-      border-left: 6px solid #3498db;
-      border-radius: 8px;
-      padding: 14px 18px;
-      cursor: pointer;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      padding: 10px; cursor: pointer;
+      font-family: 'Consolas', monospace; font-size: 12px;
+      color: var(--text-main); transition: all 0.1s;
+    }
+    .card:hover { background: rgba(255,255,255,0.08); border-color: #666; }
+    .card:active { border-color: var(--accent); transform: translateY(1px); }
+    .card strong { color: var(--accent); display: block; margin-bottom: 5px; opacity: 0.9; }
+    .highlight-var { color: var(--text-header); font-weight: bold; background: rgba(255,255,255,0.1); padding: 0 2px; }
+
+    /* Drawer */
+    #notes-drawer {
+      position: absolute; bottom: 0; left: 300px; right: 0;
+      background: var(--bg-notes); border-top: 1px solid var(--accent); z-index: 100;
+      transition: height 0.2s ease; height: 150px; display: flex; flex-direction: column;
+    }
+    #notes-drawer.minimized { height: 30px; }
+    #notes-drawer.maximized { height: 90%; border-top: 4px solid var(--accent); }
+
+    .drawer-header {
+      height: 30px; background: rgba(0,0,0,0.2); padding: 0 15px;
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 11px; text-transform: uppercase; color: var(--text-main);
+      cursor: row-resize; user-select: none;
+    }
+    .drawer-controls span { margin-left: 10px; cursor: pointer; padding: 2px 6px; }
+    .drawer-controls span:hover { color: var(--text-header); background: #444; }
+
+    #note-input {
+      flex: 1; width: 100%; background: transparent; border: none;
+      color: var(--text-main); padding: 15px; resize: none;
+      font-family: 'Consolas', monospace; font-size: 13px; outline: none;
     }
 
-    .card:hover,
-    .tags button:hover,
-    .shortcuts a:hover {
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-      transform: translateY(-2px);
+    /* Overlay */
+    #about-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(5px);
+      z-index: 99999; display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s;
     }
-
-    .card-label {
-      font-weight: bold;
-      margin-bottom: 8px;
-      color: #7fb4e9;
-    }
-
-    .card-text {
-      white-space: pre-wrap;
-      font-size: 14px;
-      color: #e4e4e4;
-    }
-
-    .tags, .shortcuts {
-      margin-top: 10px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .shortcuts a {
-      background: #000;
-      border-left: 6px solid #ffffff;
-      border-radius: 8px;
-      padding: 14px 18px;
-      cursor: pointer;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-      margin-bottom: 10px;
-      color: #7fb4e9;
-      text-decoration: none;
-    }
-    .tags button {
-      background: #1c1c1c;
-      color: #fff;
-      border: none;
-      padding: 6px 10px;
-      border-radius: 4px;
-      text-decoration: none;
-      font-size: 12px;
-      transition: background 0.2s;
-    }
-    /* Notification */
-    .notification {
-      background-color: #28a745;
-      color: white;
+    #about-overlay.open { opacity: 1; pointer-events: all; }
+    .about-card {
+      background: var(--bg-sidebar); border: 1px solid var(--border);
+      width: 400px; max-width: 90%; padding: 30px;
+      border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
       text-align: center;
-      padding: 10px 20px;
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      z-index: 2000;
-      border-radius: 6px;
-      font-size: 14px;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-      display: none;
-      animation: fadeInOut 3s ease;
     }
+    .about-card h2 { margin-top: 0; color: var(--accent); }
+    .about-card p { font-size: 14px; color: var(--text-main); line-height: 1.6; margin-bottom: 25px; }
+    .social-btns { display: flex; gap: 10px; justify-content: center; }
+    .social-btn {
+      text-decoration: none; padding: 10px 20px; border-radius: 4px;
+      font-weight: 600; font-size: 13px; color: white; transition: transform 0.1s;
+    }
+    .social-btn:hover { transform: translateY(-2px); }
+    .btn-gh { background: #333; }
+    .btn-li { background: #0077b5; }
+    .close-overlay { margin-top: 20px; cursor: pointer; color: #888; font-size: 12px; text-decoration: underline; }
 
-    @keyframes fadeInOut {
-      0%   { opacity: 0; transform: translateY(-10px); }
-      10%  { opacity: 1; transform: translateY(0); }
-      90%  { opacity: 1; }
-      100% { opacity: 0; transform: translateY(-10px); }
-    }
+    #jsonUpload { display: none; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #424242; }
+    ::-webkit-scrollbar-thumb:hover { background: #4f4f4f; }
   </style>
 </head>
 <body>
-  <div class="floating-header"><button id="toggleLayoutBtn">↕️ Toggle Layout</button>
-    <img id="logo" src="" alt="Logo" style="display:none;" />
-    <h1>Customer Support</h1>
-    <div id="fieldInputsContainer" class="controls"></div><button id="saveToSheetsBtn" title="Save to Google Sheets">📤 Save to Sheets</button>
-    <button id="clearFieldsBtn">🧹 Clear Fields</button>
-    <button id="toggleNoteBtn" onclick="toggleNote()">📝 Note</button>
-    <div id="noteArea">
-      <textarea id="noteInput" placeholder="Add a note..." style="width:100%; height:60px; resize:vertical;"></textarea>
+
+  <div id="notification-toast">📋 Copied!</div>
+
+  <div id="about-overlay">
+    <div class="about-card">
+      <h2>Simple DeskSupport</h2>
+      <p>A simple multi-session customer support console designed to streamline snippet management and workflow tracking for everyone without a CRM/Helpdesk integration.</p>
+      <div class="social-btns">
+        <a href="https://github.com/MiguelCarino/SimpleDeskSupport" target="_blank" class="social-btn btn-gh">GitHub</a>
+        <a href="https://www.linkedin.com/in/miguelcarino94/" target="_blank" class="social-btn btn-li">LinkedIn</a>
+      </div>
+      <div class="close-overlay" onclick="toggleAbout()">Close</div>
     </div>
   </div>
 
-  <div id="dropzone" title="Click or drop JSON">JSON</div>
-  <button id="downloadBtn" title="Download current JSON">⬇</button>
-  <input type="file" id="jsonUpload" accept=".json" />
-  <div id="sidebarSpacer" style="display: none; height: 0;"></div>
+  <div id="top-bar">
+    <div id="tabs-container" style="display:flex;"></div>
+    <div id="new-tab-btn" title="New Ticket">+</div>
+    <div id="info-btn" onclick="toggleAbout()">ⓘ</div>
+  </div>
 
-  <div class="container" id="snippetsContainer"></div>
+  <div id="command-palette">
+    <input type="text" id="search-box" placeholder="Search..." />
+  </div>
+
+  <div id="workspace">
+    <aside id="sidebar">
+      <div class="sidebar-section">
+        <div class="control-group">
+          <label>Status</label>
+          <select id="status-select" class="input-std">
+            <option value="ongoing">🔴 Ongoing</option>
+            <option value="pending">🟡 Pending</option>
+            <option value="done">🟢 Done</option>
+          </select>
+        </div>
+        <div id="dynamic-inputs"></div>
+      </div>
+      <div class="sidebar-footer">
+        <button class="btn" id="btn-clear">🧹 Clear</button>
+        <button class="btn" id="btn-load" onclick="document.getElementById('jsonUpload').click()">📂 Load</button>
+        <button class="btn" id="btn-backup">💾 Backup</button>
+        <button class="btn primary" id="btn-save">📄 Save Log</button>
+      </div>
+    </aside>
+
+    <main id="content-area">
+      <div id="welcome-msg" style="text-align:center; margin-top:50px; color:var(--text-main); opacity:0.6;">
+        <h3>NO CONFIGURATION LOADED</h3>
+        <p>Drag & Drop a JSON file here.</p>
+      </div>
+      <div id="snippets-grid"></div>
+    </main>
+
+    <div id="notes-drawer">
+      <div class="drawer-header" id="drawer-handle">
+        <span id="note-header-text">📝 Notes</span>
+        <div class="drawer-controls">
+          <span onclick="resizeDrawer('minimized')">_</span>
+          <span onclick="resizeDrawer('normal')">☐</span>
+          <span onclick="resizeDrawer('maximized')">🗖</span>
+        </div>
+      </div>
+      <textarea id="note-input" placeholder="..."></textarea>
+    </div>
+  </div>
+
+  <input type="file" id="jsonUpload" accept=".json" />
 
 <script>
-  let fieldValues = {};
-  let lastSnippets = {};
-  let hiddenFields = {};
+  // --- STATE ---
+  const hostHash = Math.random().toString(36).substring(2, 8).toUpperCase();
+  let sessions = []; 
+  let activeSessionId = null;
+  let snippetConfig = {}; 
   let filters = {};
-  let noteValue = "";
-  let isVerticalLayout = false;
-  let sidebarMode = false;
+  let hiddenFields = {};
 
+  const LS_CONFIG = "support_ide_config";
+  const LS_SESSIONS = "support_ide_sessions";
+  const LS_ACTIVE = "support_ide_active";
 
-  function adjustContainerOffset() {
-    const header = document.querySelector(".floating-header");
-    const container = document.querySelector(".container");
-    const height = header.offsetHeight;
-    container.style.paddingTop = (height + 20) + "px";
-  }
+  // --- INIT ---
+  window.addEventListener('load', () => {
+    const savedConfig = localStorage.getItem(LS_CONFIG);
+    if(savedConfig) {
+      try {
+        const json = JSON.parse(savedConfig);
+        // Load config without reset
+        loadConfigInternal(json, false);
+      } catch(e) { console.error("Config corrupt", e); }
+    }
 
-  window.addEventListener("load", adjustContainerOffset);
-  window.addEventListener("resize", adjustContainerOffset);
-
-  document.getElementById("dropzone").addEventListener("click", () => document.getElementById("jsonUpload").click());
-  document.getElementById("dropzone").addEventListener("dragover", (e) => e.preventDefault());
-  document.getElementById("dropzone").addEventListener("drop", (e) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) readJsonFile(file);
+    const savedSessions = localStorage.getItem(LS_SESSIONS);
+    const savedActive = localStorage.getItem(LS_ACTIVE);
+    
+    if(savedSessions && JSON.parse(savedSessions).length > 0) {
+      sessions = JSON.parse(savedSessions);
+      activeSessionId = savedActive ? parseInt(savedActive) : sessions[0].id;
+      if(!sessions.find(s => s.id === activeSessionId)) activeSessionId = sessions[0].id;
+      renderTabs();
+      switchTab(activeSessionId);
+    } else {
+      createNewSession(true); // Defaults for fresh load
+    }
   });
 
-  document.getElementById("clearFieldsBtn").addEventListener("click", () => {
-    const inputs = document.querySelectorAll("#fieldInputsContainer input");
-    inputs.forEach(input => {
-      const fieldName = input.placeholder;
-      if (!(fieldName in hiddenFields)) {
-        input.value = "";
-        fieldValues[fieldName] = "";
-      }
+  setInterval(() => {
+    if(activeSessionId) saveCurrentStateToMemory(); 
+    localStorage.setItem(LS_SESSIONS, JSON.stringify(sessions));
+    localStorage.setItem(LS_ACTIVE, activeSessionId);
+  }, 2000);
+
+  // --- LOGIC ---
+  function applyTheme(theme) {
+    const root = document.documentElement;
+    if(theme.nav) root.style.setProperty('--bg-nav', theme.nav);
+    if(theme.sidebar) root.style.setProperty('--bg-sidebar', theme.sidebar);
+    if(theme.content) root.style.setProperty('--bg-content', theme.content);
+    if(theme.notes) root.style.setProperty('--bg-notes', theme.notes);
+    if(theme.accent) root.style.setProperty('--accent', theme.accent);
+    if(theme.textMain) root.style.setProperty('--text-main', theme.textMain);
+    if(theme.textHeader) root.style.setProperty('--text-header', theme.textHeader);
+  }
+
+  function applyUILabels(ui) {
+    if(!ui) return;
+    const map = {
+        "btn-load": ui.btnLoad, "btn-backup": ui.btnBackup, "btn-save": ui.btnSave, "btn-clear": ui.btnClear,
+        "search-box": ui.searchPlaceholder, "note-input": ui.notesPlaceholder 
+    };
+    Object.keys(map).forEach(id => {
+        const el = document.getElementById(id);
+        if(el && map[id]) {
+            if(el.tagName === "INPUT" || el.tagName === "TEXTAREA") el.placeholder = map[id];
+            else el.innerText = map[id];
+        }
     });
-    renderSnippets(lastSnippets); // Update cards
-    showNotification("🧹 Fields cleared!");
-  });
-
-  document.getElementById("toggleLayoutBtn").addEventListener("click", () => {
-  const container = document.getElementById("fieldInputsContainer");
-  const spacer = document.getElementById("sidebarSpacer");
-
-  sidebarMode = !sidebarMode;
-  container.classList.toggle("sidebar", sidebarMode);
-  document.body.classList.toggle("sidebar-mode", sidebarMode);
-
-  if (sidebarMode) {
-    spacer.style.display = "block";
-    spacer.style.height = "60px"; // Adjust based on sidebar height
-  } else {
-    spacer.style.display = "none";
-    spacer.style.height = "0";
+    if(ui.statusOngoing) document.querySelector("option[value='ongoing']").innerText = ui.statusOngoing;
+    if(ui.statusPending) document.querySelector("option[value='pending']").innerText = ui.statusPending;
+    if(ui.statusDone) document.querySelector("option[value='done']").innerText = ui.statusDone;
   }
 
-  adjustContainerOffset(); // Still useful if other offsets apply
-});
+  function toggleAbout() { document.getElementById("about-overlay").classList.toggle("open"); }
+  document.getElementById("about-overlay").addEventListener("click", (e) => { if(e.target.id === "about-overlay") toggleAbout(); });
 
-
-  function adjustContainerOffset() {
-    const header = document.querySelector(".floating-header");
-    const note = document.getElementById("noteArea");
-    const container = document.querySelector(".container");
-
-    const headerHeight = header?.offsetHeight || 0;
-    const noteHeight = (note && getComputedStyle(note).display !== "none") ? note.offsetHeight : 0;
-
-    const totalOffset = headerHeight + noteHeight + 20; // 20px buffer
-    container.style.paddingTop = sidebarMode ? "20px" : `${totalOffset}px`;
+  function showToast(msg) {
+    const el = document.getElementById("notification-toast");
+    el.textContent = msg; el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 2000);
   }
 
-  function updateClearButtonState() {
-    const hasVisibleFields = Object.keys(fieldValues).some(f => !(f in hiddenFields));
-    document.getElementById("clearFieldsBtn").disabled = !hasVisibleFields;
+  // --- TABS & SESSIONS ---
+  function createNewSession(useDefaults = false) {
+    const id = Date.now();
+    const newSession = { id: id, title: `Ticket ${sessions.length + 1}`, status: 'ongoing', data: {}, note: "" };
+    
+    if(snippetConfig.fields) {
+      Object.keys(snippetConfig.fields).forEach(k => {
+          if (useDefaults || (hiddenFields && hiddenFields[k])) {
+             newSession.data[k] = snippetConfig.fields[k];
+          } else {
+             newSession.data[k] = ""; 
+          }
+      });
+    }
+    sessions.push(newSession);
+    switchTab(id);
+    renderTabs();
   }
 
-  document.getElementById("jsonUpload").addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (file) readJsonFile(file);
-  });
+  function switchTab(id) {
+    // Save current state ONLY if we have a valid active session.
+    // When loading a backup, activeSessionId is set to null first to PREVENT this save.
+    if (activeSessionId) saveCurrentStateToMemory();
+    
+    activeSessionId = id;
+    const session = sessions.find(s => s.id === id);
+    if(!session) return; 
 
-  document.getElementById("downloadBtn").addEventListener("click", () => {
-    const output = structuredClone(lastSnippets);
-    output.fields = { ...fieldValues };
-    output.hidden = { ...hiddenFields };
-    output.filters = { ...filters };
-    output.note = document.getElementById("noteInput").value || "";
+    // Populate inputs from Session Data
+    const inputsContainer = document.getElementById("dynamic-inputs");
+    const inputs = inputsContainer.querySelectorAll("input");
+    
+    // If inputs exist (from config load), fill them
+    if(inputs.length > 0 && snippetConfig.fields) {
+        inputs.forEach(input => {
+          const key = input.getAttribute("data-key");
+          input.value = session.data[key] !== undefined ? session.data[key] : "";
+        });
+    } else if (snippetConfig.fields) {
+        // Fallback: build if missing
+        renderSidebarInputs(snippetConfig.fields);
+    }
 
-    const json = JSON.stringify(output, null, 2);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "snippets.json";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
-
-  function toggleNote() {
-    const noteDiv = document.getElementById("noteArea");
-    const isHidden = getComputedStyle(noteDiv).display === "none";
-    noteDiv.style.display = isHidden ? "block" : "none";
-    adjustContainerOffset();
+    document.getElementById("note-input").value = session.note || "";
+    document.getElementById("status-select").value = session.status;
+    updateNoteHeader(session.title);
+    renderTabs();
+    renderSnippets(); 
   }
 
-  
-  function adjustContainerOffset() {
-    const header = document.querySelector(".floating-header");
-    const container = document.querySelector(".container");
-    const height = header.offsetHeight;
-    container.style.paddingTop = sidebarMode ? "20px" : (height + 20) + "px";
+  function saveCurrentStateToMemory() {
+    const session = sessions.find(s => s.id === activeSessionId);
+    if (!session) return;
+    const inputs = document.querySelectorAll("#dynamic-inputs input");
+    inputs.forEach(input => session.data[input.getAttribute("data-key")] = input.value);
+    session.note = document.getElementById("note-input").value;
+    session.status = document.getElementById("status-select").value;
   }
 
-  function showNotification(message) {
-    const notification = document.createElement('div');
-    notification.className = 'notification';
-    notification.innerText = message;
-    document.body.appendChild(notification);
-    notification.style.display = 'block';
-    setTimeout(() => {
-      notification.style.display = 'none';
-      document.body.removeChild(notification);
-    }, 3000);
+  function closeTab(e, id) {
+    e.stopPropagation();
+    if (sessions.length === 1) return alert("Cannot close the last tab.");
+    const index = sessions.findIndex(s => s.id === id);
+    sessions.splice(index, 1);
+    if (id === activeSessionId) switchTab(sessions[Math.max(0, index - 1)].id);
+    else renderTabs();
   }
 
-  function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => {
-      showNotification("✅ Copied to clipboard!");
-    }).catch(err => {
-      console.error("Clipboard error:", err);
-      showNotification("❌ Failed to copy.");
+  function renderTabs() {
+    const container = document.getElementById("tabs-container");
+    container.innerHTML = "";
+    sessions.forEach((s, index) => {
+      s.title = `Ticket ${index + 1}`; 
+      const el = document.createElement("div");
+      el.className = `tab status-${s.status} ${s.id === activeSessionId ? 'active' : ''}`;
+      el.onclick = () => switchTab(s.id);
+      el.innerHTML = `<div class="tab-status-dot"></div><span>${s.title}</span><span class="tab-close" onclick="closeTab(event, ${s.id})">×</span>`;
+      container.appendChild(el);
     });
+  }
+  document.getElementById("new-tab-btn").addEventListener("click", () => createNewSession(false));
+
+  // --- ACTIONS ---
+  document.getElementById("btn-clear").addEventListener("click", () => {
+    if(!confirm("Clear fields?")) return;
+    const session = sessions.find(s => s.id === activeSessionId);
+    if(!session) return;
+    Object.keys(session.data).forEach(k => { if(!hiddenFields[k]) session.data[k] = ""; });
+    const inputs = document.querySelectorAll("#dynamic-inputs input");
+    inputs.forEach(input => input.value = "");
+    renderSnippets(); showToast("Fields Cleared");
+  });
+
+  document.getElementById("status-select").addEventListener("change", (e) => {
+    const session = sessions.find(s => s.id === activeSessionId);
+    if(session) { session.status = e.target.value; renderTabs(); }
+  });
+  document.getElementById("note-input").addEventListener("input", (e) => {
+    const session = sessions.find(s => s.id === activeSessionId);
+    if(session) session.note = e.target.value;
+  });
+
+  function updateNoteHeader(title) {
+    const headerText = snippetConfig.ui && snippetConfig.ui.notesHeader ? snippetConfig.ui.notesHeader : "📝 Notes";
+    document.getElementById("note-header-text").innerText = `${headerText} - ${title}`;
+  }
+
+  document.getElementById("search-box").addEventListener("input", (e) => {
+    const term = e.target.value.toLowerCase();
+    document.querySelectorAll(".card").forEach(card => {
+      card.style.display = card.textContent.toLowerCase().includes(term) ? "block" : "none";
+    });
+  });
+
+  // --- FILE LOADERS ---
+  function loadConfigInternal(json, hardReset = true) {
+    if(hardReset) activeSessionId = null; // Important: detach session to prevent overwrite
+
+    snippetConfig = json;
+    hiddenFields = json.hidden || {};
+    filters = json.filters || {};
+    
+    if(json.theme) applyTheme(json.theme);
+    if(json.ui) applyUILabels(json.ui);
+
+    localStorage.setItem(LS_CONFIG, JSON.stringify(json));
+    document.getElementById("welcome-msg").style.display = "none";
+    
+    renderSidebarInputs(json.fields);
+
+    if(hardReset) {
+      sessions = [];
+      createNewSession(true); // Load defaults
+    } else {
+        if(activeSessionId) switchTab(activeSessionId);
+    }
   }
 
   function readJsonFile(file) {
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = (e) => {
       try {
-        const parsed = JSON.parse(event.target.result);
-        if (parsed.logo) {
-          const logo = document.getElementById("logo");
-          logo.src = parsed.logo;
-          logo.style.display = "block";
+        const json = JSON.parse(e.target.result);
+        if(json.appType === "workspace_backup") {
+          if(confirm("Restore Backup?")) {
+             // 1. Reset ID to prevent 'switchTab' from saving over data
+             activeSessionId = null; 
+             // 2. Load Config
+             loadConfigInternal(json.config, false); 
+             // 3. Restore Sessions
+             sessions = json.sessions;
+             // 4. Switch safely
+             switchTab(json.activeId);
+             showToast("Backup Restored");
+          }
+        } else {
+           if(confirm("Load Config? (Clears Tickets)")) {
+             loadConfigInternal(json, true); 
+             showToast("Config Loaded");
+           }
         }
-        if (parsed.hidden) hiddenFields = parsed.hidden;
-        if (parsed.filters) filters = parsed.filters;
-        if (parsed.note) {
-          noteValue = parsed.note;
-          document.getElementById("noteInput").value = noteValue;
-        }
-        if (parsed.googleSheetFields && Array.isArray(parsed.googleSheetFields)) {
-          googleSheetFields = parsed.googleSheetFields;
-        }
-        document.getElementById("noteArea").style.display = noteValue ? "block" : "none";
-        if (parsed.fields) renderFields(parsed.fields);
-        lastSnippets = parsed;
-        renderSnippets(parsed);
-        adjustContainerOffset();
-      } catch (err) {
-        alert("Invalid JSON format.");
-      }
+      } catch(err) { alert("Invalid JSON"); }
     };
     reader.readAsText(file);
   }
 
-  function renderFields(fields) {
-    const container = document.getElementById("fieldInputsContainer");
+  function renderSidebarInputs(fields) {
+    const container = document.getElementById("dynamic-inputs");
     container.innerHTML = "";
-    container.classList.toggle("column", Object.keys(fields).length > 4);
+    if(!fields) return;
+    let session = sessions.find(s => s.id === activeSessionId);
 
-    Object.entries(fields).forEach(([key, value]) => {
-      fieldValues[key] = value;
+    Object.entries(fields).forEach(([key, defaultVal]) => {
+      if(hiddenFields && hiddenFields[key]) return;
+      
+      const group = document.createElement("div");
+      group.className = "control-group";
+      const label = document.createElement("label");
+      label.textContent = key;
       const input = document.createElement("input");
-      input.type = "text";
-      input.placeholder = key;
-      input.value = value;
-      input.addEventListener("input", (e) => {
-        let rawValue = e.target.value;
-        if (filters[key] && filters[key].regex) {
-          try {
-            const match = rawValue.match(new RegExp(filters[key].regex));
-            fieldValues[key] = match ? match[0] : rawValue;
-          } catch (err) {
-            fieldValues[key] = rawValue;
-          }
-        } else {
-          fieldValues[key] = rawValue;
-        }
-        renderSnippets(lastSnippets);
-      });
-      container.appendChild(input);
-    });
+      input.type = "text"; input.className = "input-std";
+      input.setAttribute("data-key", key);
+      
+      // If we are mid-restore or no session exists, use default temporarily
+      let valueToSet = defaultVal;
+      if (session) {
+          if (session.data[key] === undefined) session.data[key] = "";
+          valueToSet = session.data[key];
+      }
+      input.value = valueToSet;
 
-    adjustContainerOffset();
+      input.addEventListener("input", (e) => {
+        let val = e.target.value;
+        if(filters[key] && filters[key].regex) {
+          try { const m = val.match(new RegExp(filters[key].regex)); val = m ? m[0] : val; } catch(err){}
+        }
+        const currentSess = sessions.find(s => s.id === activeSessionId);
+        if(currentSess) currentSess.data[key] = val;
+        renderSnippets();
+      });
+      group.appendChild(label); group.appendChild(input); container.appendChild(group);
+    });
   }
 
-  function renderSnippets(snippets) {
-    const container = document.getElementById("snippetsContainer");
+  function renderSnippets() {
+    const container = document.getElementById("snippets-grid");
     container.innerHTML = "";
+    if(!snippetConfig || !snippetConfig.fields) return;
 
-    Object.entries(snippets).forEach(([category, content]) => {
-      if (["fields", "logo", "note", "hidden", "filters", "googleSheetFields"].includes(category)) return;
+    const session = sessions.find(s => s.id === activeSessionId);
+    const safeData = session ? session.data : {};
+    const ignore = ["fields", "logo", "note", "hidden", "filters", "googleSheetFields", "theme", "ui"];
 
-      const section = document.createElement("div");
-      section.className = "category";
-
-      const title = document.createElement("h2");
-      title.textContent = category;
-      section.appendChild(title);
-
-      if (content.tags && Array.isArray(content.tags)) {
-        const tagWrap = document.createElement("div");
-        tagWrap.className = "tags";
-        content.tags.forEach(tag => {
-          const tagBtn = document.createElement("button");
-          tagBtn.textContent = tag;
-          tagWrap.appendChild(tagBtn);
-        });
-        section.appendChild(tagWrap);
-      }
-
-      if (content.shortcuts && Array.isArray(content.shortcuts)) {
-        const shortcutWrap = document.createElement("div");
-        shortcutWrap.className = "shortcuts";
-        content.shortcuts.forEach(shortcut => {
-          const a = document.createElement("a");
-          a.href = shortcut.url;
-          a.target = "_blank";
-          a.textContent = shortcut.label;
-          shortcutWrap.appendChild(a);
-        });
-        section.appendChild(shortcutWrap);
-      }
-
-      const grid = document.createElement("div");
-      grid.className = "grid";
+    Object.entries(snippetConfig).forEach(([cat, content]) => {
+      if(ignore.includes(cat)) return;
+      const header = document.createElement("div");
+      header.className = "category-header"; header.textContent = cat; container.appendChild(header);
+      const grid = document.createElement("div"); grid.className = "grid";
 
       Object.entries(content).forEach(([label, text]) => {
-        if (["tags", "shortcuts"].includes(label)) return;
-
-        const card = document.createElement("div");
-        card.className = "card";
-
-        const rendered = text.replace(/\[([^\]]+)\]/g, (_, key) => {
-          if (fieldValues[key] !== undefined) return fieldValues[key];
-          if (hiddenFields[key] !== undefined) return hiddenFields[key];
-          return `[${key}]`;
+        if(["tags", "shortcuts"].includes(label)) return;
+        const card = document.createElement("div"); card.className = "card";
+        
+        const displayHtml = text.replace(/\[([^\]]+)\]/g, (_, k) => {
+          const val = safeData[k] || (hiddenFields && hiddenFields[k]) || `[${k}]`;
+          return `<span class="highlight-var">${val}</span>`;
         });
-
-        card.addEventListener("click", () => {
-          copyToClipboard(rendered);
+        const rawText = text.replace(/\[([^\]]+)\]/g, (_, k) => {
+          return safeData[k] || (hiddenFields && hiddenFields[k]) || `[${k}]`;
         });
-
-        const cardLabel = document.createElement("div");
-        cardLabel.className = "card-label";
-        cardLabel.textContent = label;
-
-        const cardText = document.createElement("div");
-        cardText.className = "card-text";
-        cardText.textContent = rendered;
-
-        card.appendChild(cardLabel);
-        card.appendChild(cardText);
+        
+        card.innerHTML = `<strong>${label}</strong>${displayHtml}`;
+        card.onclick = () => {
+          navigator.clipboard.writeText(rawText);
+          showToast("📋 Copied!");
+        };
         grid.appendChild(card);
       });
-
-      section.appendChild(grid);
-      container.appendChild(section);
+      container.appendChild(grid);
     });
+    const searchVal = document.getElementById("search-box").value;
+    if(searchVal) document.getElementById("search-box").dispatchEvent(new Event('input'));
   }
-  fetch("assets/json/snippets.json")
-        .then(res => res.json())
-        .then(json => {
-          if (json.logo) {
-            const logo = document.getElementById("logo");
-            logo.src = json.logo;
-            logo.style.display = "block";
-          }
-          if (json.hidden) hiddenFields = json.hidden;
-          if (json.filters) filters = json.filters;
-          if (json.note) {
-            noteValue = json.note;
-            document.getElementById("noteInput").value = noteValue;
-          }
-          if (json.fields) renderFields(json.fields);
-          lastSnippets = json;
-          renderSnippets(json);
-          adjustContainerOffset();
-        })
-        .catch(() => console.warn("snippets.json not found."));
-        
-  const scriptURL = "https://script.google.com/a/macros/test/s/custom/exec";
 
-  document.getElementById("saveToSheetsBtn").addEventListener("click", () => {
-    const data = {};
-    googleSheetFields.forEach(k => {
-      if (k === "timestamp") {
-        data[k] = new Date().toISOString();
-      } else if (k === "timestamp") {
-        data[k] = new Date().toISOString();
-      } else if (k === "note") {
-        data[k] = document.getElementById("noteInput").value || "";
-      } else if (fieldValues.hasOwnProperty(k)) {
-        data[k] = fieldValues[k];
-      }
-    });
-
-    const now = new Date();
-    const timestamp = now.toISOString().replace(/[:.]/g, '-');
-    const csvLine = googleSheetFields.map(k => `"${data[k] || ''}"`).join(",");
-    const fallbackFilename = `fallback-${timestamp}-${googleSheetFields.map(k => sanitize(data[k])).join("-")}.txt`;
-
-    console.log("Attempting to save to Google Sheets", { scriptURL, data });
-
-    fetch(scriptURL, {
-      method: "POST",
-      body: JSON.stringify(data),
-      headers: {
-        "Content-Type": "application/json"
-      }
-    })
-    .then(res => {
-      console.log("Google Sheets response status:", res.status);
-      return res.text();
-    })
-    .then(response => {
-      console.log("Google Sheets response text:", response);
-      showNotification("✅ Saved to Google Sheets!");
-    })
-    .catch(err => {
-      console.error("❌ Google Sheets save error:", err);
-      const blob = new Blob([csvLine], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fallbackFilename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showNotification("📄 Fallback saved as .txt (CSV format)");
-    });
+  // --- EXPORT ---
+  document.getElementById("btn-backup").addEventListener("click", () => {
+    saveCurrentStateToMemory();
+    const backup = { appType: "workspace_backup", timestamp: new Date().toISOString(), config: snippetConfig, sessions: sessions, activeId: activeSessionId };
+    downloadFile(`backup-${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(backup));
   });
 
-  function sanitize(str) {
-    return String(str || "").replace(/[^a-z0-9\-]/gi, "_").replace(/_+/g, "_").substring(0, 20);
-  }
-</script>
+  document.getElementById("btn-save").addEventListener("click", () => {
+    const session = sessions.find(s => s.id === activeSessionId);
+    if(!session) return;
+    const now = new Date();
+    const filename = `${now.toISOString().split('T')[0]}-${hostHash}.txt`;
+    let content = `LOG ID: ${hostHash}\nDATE: ${now.toLocaleString()}\nSTATUS: ${session.status.toUpperCase()}\n----------------\n`;
+    Object.entries(session.data).forEach(([k, v]) => { if(v) content += `${k}: ${v}\n`; });
+    content += `----------------\nNOTES:\n${session.note}\n`;
+    downloadFile(filename, content); showToast("Log Saved");
+  });
 
+  function downloadFile(name, content) {
+    const blob = new Blob([content], {type: "text/plain"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+
+  document.body.addEventListener("dragover", e => e.preventDefault());
+  document.body.addEventListener("drop", e => { e.preventDefault(); if(e.dataTransfer.files[0]) readJsonFile(e.dataTransfer.files[0]); });
+  document.getElementById("jsonUpload").addEventListener("change", (e) => { if(e.target.files[0]) readJsonFile(e.target.files[0]); });
+
+  function resizeDrawer(state) {
+    const drawer = document.getElementById("notes-drawer");
+    drawer.className = state;
+    const content = document.getElementById("content-area");
+    if(state === 'maximized') content.style.display = 'none';
+    else { content.style.display = 'block'; content.style.paddingBottom = (state === 'normal' ? 160 : 40) + "px"; }
+  }
+  document.getElementById("drawer-handle").addEventListener("dblclick", () => {
+    const d = document.getElementById("notes-drawer");
+    resizeDrawer(d.classList.contains("minimized") ? "normal" : "minimized");
+  });
+</script>
 </body>
 </html>
