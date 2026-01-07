@@ -251,8 +251,8 @@
       <h2>Support IDE</h2>
       <p>A high-efficiency, multi-session customer support console designed to streamline snippet management and workflow tracking.</p>
       <div class="social-btns">
-        <a href="https://github.com" target="_blank" class="social-btn btn-gh">GitHub</a>
-        <a href="https://linkedin.com" target="_blank" class="social-btn btn-li">LinkedIn</a>
+        <a href="https://github.com/MiguelCarino/" target="_blank" class="social-btn btn-gh">GitHub</a>
+        <a href="https://www.linkedin.com/in/miguelcarino94/" target="_blank" class="social-btn btn-li">LinkedIn</a>
       </div>
       <div class="close-overlay" onclick="toggleAbout()">Close</div>
     </div>
@@ -317,8 +317,11 @@
   </div>
 
   <input type="file" id="jsonUpload" accept=".json" />
-
+  <script src="./assets/js/default.js"></script>
 <script>
+  // --- DEFAULT JSON (FOR FIRST LOAD) ---
+  
+
   // --- STATE ---
   const hostHash = Math.random().toString(36).substring(2, 8).toUpperCase();
   let sessions = []; 
@@ -335,27 +338,40 @@
 
   // --- INIT ---
   window.addEventListener('load', () => {
-    // 1. Config
+    // 1. Check for Saved Data (Priority #1)
     const savedConfig = localStorage.getItem(LS_CONFIG);
-    if(savedConfig) {
+
+    if (savedConfig) {
+      // EXISTING USER: Load from memory
       try {
         const json = JSON.parse(savedConfig);
-        loadConfigInternal(json, false);
+        loadConfigInternal(json, false); // false = do not wipe sessions yet
       } catch(e) { console.error("Config corrupt", e); }
+    } 
+    else if (typeof DEFAULT_CONFIG !== 'undefined') {
+      // NEW USER (Offline): Load from default.js
+      console.log("Loading Default Config");
+      loadConfigInternal(DEFAULT_CONFIG, true); // true = wipe and start fresh
     }
 
-    // 2. Sessions
+    // 2. Restore Sessions (Only if we didn't just do a fresh start)
     const savedSessions = localStorage.getItem(LS_SESSIONS);
     const savedActive = localStorage.getItem(LS_ACTIVE);
     
-    if(savedSessions && JSON.parse(savedSessions).length > 0) {
+    // If we have saved sessions AND we loaded a saved config, restore them.
+    if(savedConfig && savedSessions && JSON.parse(savedSessions).length > 0) {
       sessions = JSON.parse(savedSessions);
       activeSessionId = savedActive ? parseInt(savedActive) : sessions[0].id;
       if(!sessions.find(s => s.id === activeSessionId)) activeSessionId = sessions[0].id;
       renderTabs();
       switchTab(activeSessionId);
     } else {
-      createNewSession(true);
+      // If sessions are empty (and we have a config loaded), make sure we have at least 1 ticket
+      if(sessions.length === 0 && (savedConfig || typeof DEFAULT_CONFIG !== 'undefined')) {
+         // If loadConfigInternal(..., true) ran, it already created a session. 
+         // But just in case:
+         if(sessions.length === 0) createNewSession(true);
+      }
     }
   });
 
@@ -375,11 +391,9 @@
         if(config.config.supportedLangs) langs = config.config.supportedLangs;
         if(config.config.defaultLang) {
             defaultLangFallback = config.config.defaultLang;
-            // Only set current if not already set by previous load or user action (if persistence desired)
             if(!currentLang) currentLang = defaultLangFallback;
         }
     }
-    // ensure currentLang is valid
     if(!langs.includes(currentLang)) currentLang = defaultLangFallback;
 
     langs.forEach(code => {
@@ -397,7 +411,6 @@
     });
   }
 
-  // Fallback Logic: Specific Lang -> Default Lang -> First Avail -> Raw String
   function getLocalizedText(obj) {
     if (typeof obj === 'string') return obj; // Not translated
     if (!obj) return "";
@@ -410,7 +423,6 @@
     return "";
   }
   
-  // New helper: Translates Keys (Headers/Titles) using Dictionary
   function translateKey(key) {
     if(snippetConfig.dictionary && snippetConfig.dictionary[key]) {
         return getLocalizedText(snippetConfig.dictionary[key]);
@@ -722,8 +734,28 @@
   // --- ACTIONS ---
   document.getElementById("btn-backup").addEventListener("click", () => {
     saveCurrentStateToMemory();
-    const backup = { appType: "workspace_backup", timestamp: new Date().toISOString(), config: snippetConfig, sessions: sessions, activeId: activeSessionId };
-    downloadFile(`backup-${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(backup));
+
+    // Reconstruct the object to ensure a nice order for the user
+    const backup = {
+      // 1. Instructions (Pseudo-comment)
+        _instructions: "Edit the 'config' section below to change themes, language, or snippets. Drag this file back into the app to load.",
+      
+      // 2. Metadata
+      appType: "workspace_backup",
+      timestamp: new Date().toISOString(),
+      
+      // 3. The Editable Config (Top of file)
+      config: snippetConfig,
+      
+      // 4. Session Data (Bottom of file - less likely to be edited)
+      activeId: activeSessionId,
+      sessions: sessions
+    };
+
+    // The '2' argument here adds 2 spaces of indentation, making it readable
+    const prettyJSON = JSON.stringify(backup, null, 2);
+    
+    downloadFile(`backup-${new Date().toISOString().slice(0,10)}.json`, prettyJSON);
   });
 
   document.getElementById("btn-save").addEventListener("click", () => {
