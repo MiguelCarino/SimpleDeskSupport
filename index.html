@@ -12,6 +12,7 @@
       --bg-content: #1e1e1e;
       --bg-notes: #1e1e1e;
       --accent: #E91E63;
+      --url-card-color: #00bcd4;
       --text-main: #e0e0e0;
       --text-header: #ffffff;
       
@@ -97,13 +98,14 @@
     }
     #lang-select:hover { border-color: var(--accent); color: #fff; }
 
-    #info-btn {
+    #info-btn, #dim-btn {
       width: 24px; height: 24px;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer; color: #888; border-radius: 4px;
       font-size: 14px; margin-bottom: 5px;
     }
-    #info-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    #info-btn:hover, #dim-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    #dim-btn.dim-on { color: var(--accent); }
 
     /* Search */
     #command-palette {
@@ -184,6 +186,23 @@
     .card:active { border-color: var(--accent); transform: translateY(1px); }
     .card strong { color: var(--accent); display: block; margin-bottom: 5px; opacity: 0.9; }
     .highlight-var { color: var(--text-header); font-weight: bold; background: rgba(255,255,255,0.1); padding: 0 2px; }
+
+    .card.url-card { border-color: rgba(0,188,212,0.3); }
+    .card.url-card:hover { border-color: var(--url-card-color); }
+    .card.url-card:active { border-color: var(--url-card-color); }
+    .card.url-card strong { color: var(--url-card-color); }
+    .card.card-dim { opacity: 0.2; }
+    .control-group.field-filter-focus > label {
+      color: var(--accent); opacity: 1;
+    }
+    .control-group.field-filter-focus > label::after {
+      content: " ◉"; font-size: 9px; vertical-align: middle;
+    }
+    .filter-preview {
+      display: block; font-size: 10px; font-family: 'Consolas', monospace;
+      color: var(--text-main); opacity: 0.5; margin-top: 3px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
 
     /* Drawer */
     #notes-drawer {
@@ -266,6 +285,7 @@
       <select id="lang-select">
         <option value="en">EN</option>
       </select>
+      <div id="dim-btn" title="Toggle card dimming">◉</div>
       <div id="info-btn" onclick="toggleAbout()">ⓘ</div>
     </div>
   </div>
@@ -329,6 +349,10 @@
   let snippetConfig = {}; 
   let filters = {};
   let hiddenFields = {};
+  let fieldOptions = {};
+  let fieldCards = {};
+  let focusedField = null;
+  let dimmingEnabled = true;
   let currentLang = "en"; // Default
   let defaultLangFallback = "en";
 
@@ -430,6 +454,40 @@
     return key;
   }
 
+  function applyFilter(key, val) {
+    if (!filters[key] || !filters[key].regex) return val;
+    try {
+      const m = val.match(new RegExp(filters[key].regex));
+      if (!m) return val;
+      if (filters[key].group !== undefined) return m[filters[key].group] ?? val;
+      if (m.groups && Object.keys(m.groups).length > 0) return Object.values(m.groups)[0] ?? val;
+      return m[1] !== undefined ? m[1] : m[0];
+    } catch(e) { return val; }
+  }
+
+  function applyFieldCardFiltering() {
+    const cards = document.querySelectorAll("#snippets-grid .card[data-card-label]");
+    if (!dimmingEnabled || !focusedField || !fieldCards[focusedField]) {
+      cards.forEach(c => c.classList.remove("card-dim"));
+      return;
+    }
+    const valueMap = fieldCards[focusedField];
+    const isDropdown = Array.isArray(fieldOptions[focusedField]);
+    let relatedSet;
+    if (isDropdown) {
+      const session = sessions.find(s => s.id === activeSessionId);
+      const val = session ? (session.data[focusedField] || "") : "";
+      const related = val && valueMap[val];
+      if (!related) { cards.forEach(c => c.classList.remove("card-dim")); return; }
+      relatedSet = new Set(related);
+    } else {
+      relatedSet = new Set(Object.values(valueMap).flat());
+    }
+    cards.forEach(card => {
+      card.classList.toggle("card-dim", !relatedSet.has(card.getAttribute("data-card-label")));
+    });
+  }
+
   function refreshUI() {
     if(snippetConfig.dictionary) applyUILabels(snippetConfig.dictionary);
     renderSnippets(); // Updates content AND headers
@@ -444,6 +502,7 @@
     if(theme.content) root.style.setProperty('--bg-content', theme.content);
     if(theme.notes) root.style.setProperty('--bg-notes', theme.notes);
     if(theme.accent) root.style.setProperty('--accent', theme.accent);
+    if(theme.urlCard) root.style.setProperty('--url-card-color', theme.urlCard);
     if(theme.textMain) root.style.setProperty('--text-main', theme.textMain);
     if(theme.textHeader) root.style.setProperty('--text-header', theme.textHeader);
   }
@@ -472,6 +531,17 @@
   // --- GENERAL UI ---
   function toggleAbout() { document.getElementById("about-overlay").classList.toggle("open"); }
   document.getElementById("about-overlay").addEventListener("click", (e) => { if(e.target.id === "about-overlay") toggleAbout(); });
+
+  document.getElementById("dim-btn").addEventListener("click", () => {
+    dimmingEnabled = !dimmingEnabled;
+    document.getElementById("dim-btn").classList.toggle("dim-on", dimmingEnabled);
+    if (!dimmingEnabled) {
+      focusedField = null;
+      document.querySelectorAll("#dynamic-inputs .control-group.field-filter-focus")
+        .forEach(g => g.classList.remove("field-filter-focus"));
+    }
+    applyFieldCardFiltering();
+  });
 
   function showToast(msg) {
     const el = document.getElementById("notification-toast");
@@ -506,12 +576,17 @@
 
     // Restore UI Inputs
     const inputsContainer = document.getElementById("dynamic-inputs");
-    const inputs = inputsContainer.querySelectorAll("input");
-    
-    if(inputs.length > 0 && snippetConfig.fields) {
-        inputs.forEach(input => {
-          const key = input.getAttribute("data-key");
-          input.value = session.data[key] !== undefined ? session.data[key] : "";
+    const controls = inputsContainer.querySelectorAll("[data-key]");
+
+    if(controls.length > 0 && snippetConfig.fields) {
+        controls.forEach(ctrl => {
+          const key = ctrl.getAttribute("data-key");
+          ctrl.value = session.data[key] !== undefined ? session.data[key] : "";
+          const fp = ctrl.parentElement.querySelector(".filter-preview");
+          if(fp) {
+            const filtered = applyFilter(key, ctrl.value);
+            fp.textContent = (filtered !== ctrl.value && ctrl.value) ? `→ ${filtered}` : "";
+          }
         });
     } else if (snippetConfig.fields) {
         renderSidebarInputs(snippetConfig.fields);
@@ -527,8 +602,9 @@
   function saveCurrentStateToMemory() {
     const session = sessions.find(s => s.id === activeSessionId);
     if (!session) return;
-    const inputs = document.querySelectorAll("#dynamic-inputs input");
-    inputs.forEach(input => session.data[input.getAttribute("data-key")] = input.value);
+    document.querySelectorAll("#dynamic-inputs [data-key]").forEach(ctrl => {
+      session.data[ctrl.getAttribute("data-key")] = ctrl.value;
+    });
     session.note = document.getElementById("note-input").value;
     session.status = document.getElementById("status-select").value;
   }
@@ -562,8 +638,8 @@
     const session = sessions.find(s => s.id === activeSessionId);
     if(!session) return;
     Object.keys(session.data).forEach(k => { if(!hiddenFields[k]) session.data[k] = ""; });
-    const inputs = document.querySelectorAll("#dynamic-inputs input");
-    inputs.forEach(input => input.value = "");
+    document.querySelectorAll("#dynamic-inputs [data-key]").forEach(ctrl => { ctrl.value = ""; });
+    document.querySelectorAll("#dynamic-inputs .filter-preview").forEach(fp => { fp.textContent = ""; });
     renderSnippets(); showToast("Cleared");
   });
 
@@ -598,6 +674,8 @@
     snippetConfig = json;
     hiddenFields = json.hidden || {};
     filters = json.filters || {};
+    fieldOptions = json.fieldOptions || {};
+    fieldCards = json.fieldCards || {};
     
     initLanguageSelector(json);
 
@@ -643,38 +721,88 @@
   function renderSidebarInputs(fields) {
     const container = document.getElementById("dynamic-inputs");
     container.innerHTML = "";
+    focusedField = null;
     if(!fields) return;
-    let session = sessions.find(s => s.id === activeSessionId);
+    const session = sessions.find(s => s.id === activeSessionId);
 
     Object.entries(fields).forEach(([key, defaultVal]) => {
       if(hiddenFields && hiddenFields[key]) return;
-      
+
       const group = document.createElement("div");
       group.className = "control-group";
       const label = document.createElement("label");
       label.textContent = key;
-      const input = document.createElement("input");
-      input.type = "text"; input.className = "input-std";
-      input.setAttribute("data-key", key);
-      
+
       let valueToSet = defaultVal;
       if (session) {
-          if (session.data[key] === undefined) session.data[key] = "";
-          valueToSet = session.data[key];
-      } else { valueToSet = defaultVal; }
-      
-      input.value = valueToSet;
+        if (session.data[key] === undefined) session.data[key] = "";
+        valueToSet = session.data[key];
+      }
 
-      input.addEventListener("input", (e) => {
-        let val = e.target.value;
-        if(filters[key] && filters[key].regex) {
-          try { const m = val.match(new RegExp(filters[key].regex)); val = m ? m[0] : val; } catch(err){}
-        }
+      const options = fieldOptions[key];
+      const hasOptions = Array.isArray(options) && options.length > 0;
+      const hasFilter = !!(filters[key] && filters[key].regex);
+
+      let control;
+      if (hasOptions) {
+        control = document.createElement("select");
+        control.className = "input-std";
+        control.setAttribute("data-key", key);
+        const emptyOpt = document.createElement("option");
+        emptyOpt.value = ""; emptyOpt.textContent = "—";
+        control.appendChild(emptyOpt);
+        options.forEach(opt => {
+          const el = document.createElement("option");
+          el.value = opt; el.textContent = opt;
+          control.appendChild(el);
+        });
+        control.value = valueToSet;
+      } else {
+        control = document.createElement("input");
+        control.type = "text"; control.className = "input-std";
+        control.setAttribute("data-key", key);
+        control.value = valueToSet;
+      }
+
+      let preview = null;
+      const updatePreview = (val) => {
+        if (!preview) return;
+        const filtered = applyFilter(key, val);
+        preview.textContent = (filtered !== val && val) ? `→ ${filtered}` : "";
+      };
+
+      const onChange = (e) => {
         const currentSess = sessions.find(s => s.id === activeSessionId);
-        if(currentSess) currentSess.data[key] = val;
+        if(currentSess) currentSess.data[key] = e.target.value;
+        updatePreview(e.target.value);
         renderSnippets();
-      });
-      group.appendChild(label); group.appendChild(input); container.appendChild(group);
+      };
+
+      control.addEventListener(hasOptions ? "change" : "input", onChange);
+
+      if (fieldCards[key]) {
+        const activateDim = () => {
+          if (!dimmingEnabled) return;
+          focusedField = key;
+          document.querySelectorAll("#dynamic-inputs .control-group.field-filter-focus")
+            .forEach(g => g.classList.remove("field-filter-focus"));
+          group.classList.add("field-filter-focus");
+          applyFieldCardFiltering();
+        };
+        control.addEventListener(hasOptions ? 'click' : 'focus', activateDim);
+      }
+
+      group.appendChild(label);
+      group.appendChild(control);
+
+      if (hasFilter) {
+        preview = document.createElement("small");
+        preview.className = "filter-preview";
+        updatePreview(valueToSet);
+        group.appendChild(preview);
+      }
+
+      container.appendChild(group);
     });
   }
 
@@ -685,48 +813,56 @@
 
     const session = sessions.find(s => s.id === activeSessionId);
     const safeData = session ? session.data : {};
-    
-    // Reserved Keys
-    const ignore = ["fields", "logo", "note", "hidden", "filters", "googleSheetFields", "theme", "ui", "dictionary", "config"];
+
+    const resolve = (k) => {
+      const raw = safeData[k] || (hiddenFields && hiddenFields[k]) || "";
+      return raw ? applyFilter(k, raw) : `[${k}]`;
+    };
+    const toDisplay = (text) => text.replace(/\[([^\]]+)\]/g, (_, k) => `<span class="highlight-var">${resolve(k)}</span>`);
+    const toRaw    = (text) => text.replace(/\[([^\]]+)\]/g, (_, k) => resolve(k));
+
+    const ignore = ["fields", "logo", "note", "hidden", "filters", "fieldOptions", "fieldCards", "googleSheetFields", "theme", "ui", "dictionary", "config"];
 
     Object.entries(snippetConfig).forEach(([catKey, content]) => {
       if(ignore.includes(catKey)) return;
-      
-      // TRANSLATE CATEGORY HEADER
-      const headerText = translateKey(catKey);
 
       const header = document.createElement("div");
-      header.className = "category-header"; header.textContent = headerText; container.appendChild(header);
+      header.className = "category-header"; header.textContent = translateKey(catKey);
+      container.appendChild(header);
       const grid = document.createElement("div"); grid.className = "grid";
+
+      if(Array.isArray(content.shortcuts)) {
+        content.shortcuts.forEach(sc => {
+          const resolvedUrl = toRaw(sc.url);
+          const card = document.createElement("div");
+          card.className = "card url-card";
+          card.setAttribute("data-card-label", sc.label);
+          card.innerHTML = `<strong>${sc.label} ↗</strong>${toDisplay(sc.url)}`;
+          card.onclick = () => window.open(resolvedUrl, "_blank", "noopener");
+          grid.appendChild(card);
+        });
+      }
 
       Object.entries(content).forEach(([labelKey, value]) => {
         if(["tags", "shortcuts"].includes(labelKey)) return;
-        
-        // TRANSLATE CARD TITLE
         const labelText = translateKey(labelKey);
-
-        // GET LOCALIZED CONTENT
-        let text = getLocalizedText(value);
-
-        const card = document.createElement("div"); card.className = "card";
-        
-        const displayHtml = text.replace(/\[([^\]]+)\]/g, (_, k) => {
-          const val = safeData[k] || (hiddenFields && hiddenFields[k]) || `[${k}]`;
-          return `<span class="highlight-var">${val}</span>`;
-        });
-        const rawText = text.replace(/\[([^\]]+)\]/g, (_, k) => {
-          return safeData[k] || (hiddenFields && hiddenFields[k]) || `[${k}]`;
-        });
-        
-        card.innerHTML = `<strong>${labelText}</strong>${displayHtml}`;
-        card.onclick = () => {
-          navigator.clipboard.writeText(rawText);
-          showToast("📋 Copied!");
-        };
+        const text = getLocalizedText(value);
+        const isUrl = /^https?:\/\//.test(text.trim());
+        const card = document.createElement("div");
+        card.className = isUrl ? "card url-card" : "card";
+        card.setAttribute("data-card-label", labelKey);
+        card.innerHTML = `<strong>${labelText}${isUrl ? " ↗" : ""}</strong>${toDisplay(text)}`;
+        if(isUrl) {
+          card.onclick = () => window.open(toRaw(text), "_blank", "noopener");
+        } else {
+          card.onclick = () => { navigator.clipboard.writeText(toRaw(text)); showToast("📋 Copied!"); };
+        }
         grid.appendChild(card);
       });
       container.appendChild(grid);
     });
+
+    applyFieldCardFiltering();
     const searchVal = document.getElementById("search-box").value;
     if(searchVal) document.getElementById("search-box").dispatchEvent(new Event('input'));
   }

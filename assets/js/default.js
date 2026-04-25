@@ -55,6 +55,10 @@ const DEFAULT_CONFIG = {
 
   "note": "",
 
+  "filters": {
+    "ticketID": { "regex": "(?:INC|CHG|REQ|PRB)-\\d+" }
+  },
+
   "fields": {
     /* Ticket / requester */
     "ticketID": "INC-000123",
@@ -122,6 +126,59 @@ const DEFAULT_CONFIG = {
     "screenshots": "Attached",
     "remoteAccess": "Yes (Quick Assist/AnyDesk/SSH)",
     "maintenanceWindow": "After 18:00"
+  },
+
+  "fieldOptions": {
+    "category":    ["Software", "Hardware", "Network", "Access", "Security"],
+    "requestType": ["Incident", "Request", "Change", "Problem"],
+    "priority":    ["P1", "P2", "P3", "P4"],
+    "impact":      ["Organization", "Department", "Multiple users", "Single user"],
+    "urgency":     ["Critical", "High", "Medium", "Low"],
+    "deviceType":  ["Laptop", "Desktop", "Tablet", "Phone", "Server", "Virtual"],
+    "os":          ["Windows", "macOS", "Linux", "iOS", "Android"],
+    "networkType": ["Wi-Fi", "Ethernet", "Cellular"],
+    "vpn":         ["Yes", "No", "N/A"],
+    "virtualized": ["Yes", "No"],
+    "frequency":   ["Always", "Often", "Intermittent", "Once"]
+  },
+
+  "fieldCards": {
+
+    /* ── Dropdowns (matched on selected value) ───────────────────────── */
+    "category": {
+      "Software": ["En Progreso", "Solicitar Repro", "Fallido", "Diagnostico",
+                   "Software Catalog", "Status Page"],
+      "Hardware": ["Pedir Detalles", "Diagnostico",
+                   "Asset Inventory", "Warranty Lookup", "Asset Lookup", "Endpoint Health", "Device Mgmt"],
+      "Network":  ["Pedir Datos", "Pruebas Basicas",
+                   "VPN Portal", "Network Status"],
+      "Security": ["Posible Phishing", "Incidente",
+                   "Security Portal", "Report Phishing"],
+      "Access":   ["Confirmación", "Solicitar MFA",
+                   "Password Reset Portal", "SSO Admin", "SSO Logs", "User Lookup"]
+    },
+    "requestType": {
+      "Incident": ["Saludos", "Genérico", "Solicitar Logs", "Reinicio", "Confirmar Solucion"],
+      "Request":  ["Saludos", "Genérico", "Pedir Info Basica", "Confirmar Solucion"],
+      "Change":   ["Saludos", "Genérico", "Confirmar Solucion", "Reinicio"],
+      "Problem":  ["Saludos", "Solicitar Logs", "Solicitar Repro", "Pedir Info Basica"]
+    },
+    "priority": {
+      "P1": ["Saludos", "Solicitar Logs", "Incidente", "Solicitar Repro"],
+      "P2": ["Saludos", "Genérico", "Solicitar Logs", "Confirmar Solucion"],
+      "P3": ["Saludos", "Genérico", "Reinicio", "Confirmar Solucion"],
+      "P4": ["Saludos", "Genérico", "Pedir Info Basica", "Confirmar Solucion"]
+    },
+
+    /* ── Text inputs (union of all declared cards shown on focus) ─────── */
+    "ticketID":      { "admin":    ["Ticket Link", "Saludos", "Solicitar Logs"] },
+    "requesterUser": { "account":  ["User Lookup", "SSO Logs", "SSO Admin", "Confirmación", "Solicitar MFA", "Password Reset Portal"] },
+    "assetTag":      { "device":   ["Asset Lookup", "Asset Inventory", "Warranty Lookup", "Endpoint Health", "Device Mgmt", "Pedir Detalles"] },
+    "hostname":      { "device":   ["Endpoint Health", "Device Mgmt", "Diagnostico", "Incidente", "Confirmar Solucion", "Reinicio"] },
+    "serialNumber":  { "hardware": ["Warranty Lookup", "Asset Inventory", "Pedir Detalles"] },
+    "appName":       { "software": ["En Progreso", "Software Catalog", "Status Page", "Solicitar Repro", "Pedir Info Basica"] },
+    "errorMessage":  { "issue":    ["Solicitar Logs", "En Progreso", "Solicitar Repro", "Diagnostico", "Fallido"] },
+    "url":           { "network":  ["Pedir Datos", "Pruebas Basicas", "VPN Portal", "Network Status"] }
   },
 
   "Saludos y Scripts": {
