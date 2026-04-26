@@ -98,7 +98,7 @@
     }
     #lang-select:hover { border-color: var(--accent); color: #fff; }
 
-    #info-btn, #dim-btn {
+    #info-btn, #dim-btn, #reset-btn {
       width: 24px; height: 24px;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer; color: #888; border-radius: 4px;
@@ -106,6 +106,7 @@
     }
     #info-btn:hover, #dim-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
     #dim-btn.dim-on { color: var(--accent); }
+    #reset-btn:hover { background: rgba(255,255,255,0.1); color: #e74c3c; }
 
     /* Search */
     #command-palette {
@@ -286,6 +287,7 @@
         <option value="en">EN</option>
       </select>
       <div id="dim-btn" title="Toggle card dimming">◉</div>
+      <div id="reset-btn" title="Reset — delete all stored data and load default template">↺</div>
       <div id="info-btn" onclick="toggleAbout()">ⓘ</div>
     </div>
   </div>
@@ -531,6 +533,14 @@
   // --- GENERAL UI ---
   function toggleAbout() { document.getElementById("about-overlay").classList.toggle("open"); }
   document.getElementById("about-overlay").addEventListener("click", (e) => { if(e.target.id === "about-overlay") toggleAbout(); });
+
+  document.getElementById("reset-btn").addEventListener("click", () => {
+    if (!confirm("Reset everything?\n\nThis will delete all stored data and reload the default template.")) return;
+    localStorage.removeItem(LS_CONFIG);
+    localStorage.removeItem(LS_SESSIONS);
+    localStorage.removeItem(LS_ACTIVE);
+    location.reload();
+  });
 
   document.getElementById("dim-btn").addEventListener("click", () => {
     dimmingEnabled = !dimmingEnabled;
@@ -790,6 +800,15 @@
           applyFieldCardFiltering();
         };
         control.addEventListener(hasOptions ? 'click' : 'focus', activateDim);
+      } else {
+        const clearDim = () => {
+          if (!dimmingEnabled) return;
+          focusedField = null;
+          document.querySelectorAll("#dynamic-inputs .control-group.field-filter-focus")
+            .forEach(g => g.classList.remove("field-filter-focus"));
+          applyFieldCardFiltering();
+        };
+        control.addEventListener(hasOptions ? 'click' : 'focus', clearDim);
       }
 
       group.appendChild(label);
